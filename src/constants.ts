@@ -6,6 +6,10 @@ export const DEFAULT_BASE_URL = "https://unjailedai.com/v1";
 /** Used until the user picks one with /model (falls back to the first model the API lists). */
 export const DEFAULT_MODEL = "glm-5.3";
 
+/** Agent tools for a fresh install: the full coding toolkit, with every write,
+ *  launch and command confirmed by the user. Change with /tools. */
+export const DEFAULT_TOOLS = "cmds" as const;
+
 export const BRAND_BLUE = "#7DD3FC";
 export const BRAND_DARK = "#0C4A6E";
 

@@ -1,8 +1,10 @@
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { processStatus, runLocalCommand, stopProcess } from "./processes.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { Worker } from "node:worker_threads";
+import type { SearchMessage, SearchRequest } from "./search.js";
 
 /** The built-in agent tools — a coding-agent toolkit like opencode/claude-code.
  *  Mode ladder (least → most capable):
@@ -24,8 +26,8 @@ export const MAX_TOOL_OUTPUT = 28_000;      // HARD cap: upstream rejects string
 export const RUN_TIMEOUT_MS = 600_000;      // 10 min — downloads, builds, server setup
 export const MAX_BG_LOG = 100_000;
 export const MAX_LIST = 500;
-export const MAX_GLOB_RESULTS = 200;
-export const MAX_GREP_RESULTS = 100;
+export { MAX_GLOB_RESULTS, MAX_GREP_RESULTS } from "./search.js";
+export const SEARCH_TIMEOUT_MS = 20_000;     // glob/grep give up (keeping partial results) after this
 export const WEB_FETCH_MAX_BYTES = 200_000;
 export const WEB_TIMEOUT_MS = 15_000;
 
@@ -291,77 +293,40 @@ function squeeze(s: string): string {
   return s.replace(/[ \t]+$/gm, "").replace(/\n{4,}/g, "\n\n\n");
 }
 
-/* ───────────── glob: tiny recursive matcher, no deps ───────────── */
+/* ───────────── glob / grep: worker thread with a time limit ───────────── */
 
-function globToRe(glob: string): RegExp {
-  let re = "";
-  let i = 0;
-  while (i < glob.length) {
-    const c = glob[i]!;
-    if (c === "*") {
-      if (glob[i + 1] === "*") {
-        // ** — any chars including /
-        re += ".*";
-        i += 2;
-        if (glob[i] === "/") i++; // '**/' also matches zero dirs
-        continue;
-      }
-      re += "[^/]*";
-    } else if (c === "?") re += "[^/]";
-    else if (c === "{") {
-      // simple {a,b} alternation
-      let j = i + 1, depth = 1, body = "";
-      while (j < glob.length && depth > 0) {
-        if (glob[j] === "{") depth++;
-        if (glob[j] === "}") { depth--; if (depth === 0) break; }
-        body += glob[j]; j++;
-      }
-      re += `(?:${body.split(",").map(escapeRe).join("|")})`;
-      i = j; i++;
-      continue;
-    } else re += escapeRe(c);
-    i++;
-  }
-  return new RegExp(`^${re}$`);
-}
-function escapeRe(s: string): string {
-  return s.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+/** Run a search off the UI thread. A folder like C:\ or a catastrophic regex
+ *  used to block the event loop (frozen terminal, dead Ctrl+C); now the worker
+ *  is simply terminated, and whatever it found so far is still returned. */
+function searchInWorker(req: SearchRequest, signal?: AbortSignal): Promise<{ hits: string[]; scanned: number; stopped?: string; error?: string }> {
+  return new Promise((resolve) => {
+    const hits: string[] = [];
+    let settled = false;
+    const worker = new Worker(new URL("./search-worker.js", import.meta.url), { workerData: req });
+    const finish = (r: { scanned: number; stopped?: string; error?: string }) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      void worker.terminate();
+      resolve({ hits, ...r });
+    };
+    const timer = setTimeout(() => finish({ scanned: -1, stopped: `timed out after ${SEARCH_TIMEOUT_MS / 1000}s — the folder is too large or the regex too slow; narrow the path, add a glob filter, or simplify the pattern` }), SEARCH_TIMEOUT_MS);
+    const onAbort = () => finish({ scanned: -1, error: "Search cancelled." });
+    signal?.addEventListener("abort", onAbort, { once: true });
+    worker.on("message", (m: SearchMessage) => {
+      if (m.type === "hit") hits.push(m.text);
+      else if (m.type === "done") finish({ scanned: m.scanned, stopped: m.stopped });
+      else finish({ scanned: -1, error: m.message });
+    });
+    worker.once("error", (e) => finish({ scanned: -1, error: e.message }));
+    worker.once("exit", () => finish({ scanned: -1, error: "Search worker exited unexpectedly." }));
+  });
 }
 
-const SKIP_DIRS = new Set(["node_modules", ".git", ".hg", ".svn", "dist", "build", ".next", "target", "__pycache__", ".venv", "venv"]);
-
-function walkFiles(root: string, out: string[], budget: { left: number }): void {
-  if (budget.left <= 0) return;
-  let entries: fs.Dirent[];
-  try { entries = fs.readdirSync(root, { withFileTypes: true }); } catch { return; }
-  for (const e of entries) {
-    if (budget.left <= 0) return;
-    if (e.isDirectory()) {
-      if (SKIP_DIRS.has(e.name) || e.name.startsWith(".")) continue;
-      walkFiles(path.join(root, e.name), out, budget);
-    } else if (e.isFile()) {
-      out.push(path.join(root, e.name));
-      budget.left--;
-    }
-  }
-}
-
-/* ───────────── grep ───────────── */
-
-function looksBinary(buf: Buffer): boolean {
-  const sample = buf.subarray(0, 8000);
-  return sample.includes(0);
-}
-
-function* grepWalk(root: string): Generator<string> {
-  let entries: fs.Dirent[];
-  try { entries = fs.readdirSync(root, { withFileTypes: true }); } catch { return; }
-  for (const e of entries) {
-    if (e.isDirectory()) {
-      if (SKIP_DIRS.has(e.name) || e.name.startsWith(".")) continue;
-      yield* grepWalk(path.join(root, e.name));
-    } else if (e.isFile()) yield path.join(root, e.name);
-  }
+function searchOutput(r: { hits: string[]; scanned: number; stopped?: string }): string {
+  const body = r.hits.length ? r.hits.join("\n") : r.scanned >= 0 ? `(no matches in ${r.scanned} files)` : "(no matches)";
+  return r.stopped ? `${body}\n…(search ${r.stopped.startsWith("timed out") ? "" : "stopped: "}${r.stopped})` : body;
 }
 
 /* ───────────── web ───────────── */
@@ -404,6 +369,23 @@ async function webFetch(url: string): Promise<ToolResult> {
   } finally {
     clearTimeout(t);
   }
+}
+
+/** Run a helper program (clipboard, trash) without blocking the UI thread —
+ *  spawnSync froze the terminal for as long as the helper took, with no limit. */
+function runHelper(command: string, args: string[], opts: { input?: string; env?: NodeJS.ProcessEnv; timeoutMs?: number } = {}): Promise<{ status: number | null; stdout: string }> {
+  return new Promise((resolve) => {
+    let stdout = "";
+    const child = spawn(command, args, {
+      windowsHide: true, env: opts.env ?? process.env, stdio: [opts.input === undefined ? "ignore" : "pipe", "pipe", "ignore"],
+    });
+    const timer = setTimeout(() => child.kill(), opts.timeoutMs ?? 15_000);
+    child.stdout?.on("data", (d: Buffer) => { stdout += d.toString("utf8"); });
+    child.once("error", () => { clearTimeout(timer); resolve({ status: null, stdout }); });
+    child.once("close", (code) => { clearTimeout(timer); resolve({ status: code, stdout }); });
+    child.stdin?.on("error", () => { /* helper exited early */ });
+    if (opts.input !== undefined) child.stdin?.end(opts.input);
+  });
 }
 
 async function launchTarget(target: string, app = false): Promise<ToolResult> {
@@ -481,43 +463,21 @@ export async function executeTool(
       const pattern = String(args.pattern ?? "");
       if (!pattern) return { ok: false, output: "pattern is required" };
       const base = resolveToolPath(String(args.path ?? "."), cwd);
-      // pattern may include a dir prefix; split leading literal dirs off
-      const all: string[] = [];
-      walkFiles(base, all, { left: 20_000 });
-      const re = globToRe(pattern);
-      const hits = all.filter((f) => {
-        const rel = path.relative(base, f).split(path.sep).join("/");
-        return re.test(rel) || re.test(rel.split("/").pop() ?? "");
-      }).slice(0, MAX_GLOB_RESULTS);
-      return { ok: true, output: hits.length ? hits.map((f) => path.relative(cwd, f)).join("\n") : "(no matches)" };
+      if (!fs.statSync(base).isDirectory()) return { ok: false, output: "path must be a directory" };
+      const r = await searchInWorker({ kind: "glob", base, cwd, pattern }, options.signal);
+      if (r.error) return { ok: false, output: r.error };
+      return { ok: true, output: clip(searchOutput(r)) };
     }
 
     if (name === "grep") {
       const pattern = String(args.pattern ?? "");
       if (!pattern) return { ok: false, output: "pattern is required" };
       const root = resolveToolPath(String(args.path ?? "."), cwd);
-      let re: RegExp;
-      try { re = new RegExp(pattern); } catch (e) { return { ok: false, output: `Invalid regex: ${(e as Error).message}` }; }
-      const onlyGlob = args.glob ? globToRe(String(args.glob)) : null;
-      const results: string[] = [];
-      const stat = fs.statSync(root);
-      const files: string[] = stat.isFile() ? [root] : [...grepWalk(root)];
-      for (const file of files) {
-        if (results.length >= MAX_GREP_RESULTS) break;
-        if (onlyGlob) {
-          const rel = path.relative(cwd, file).split(path.sep).join("/");
-          const base = rel.split("/").pop() ?? "";
-          if (!onlyGlob.test(base) && !onlyGlob.test(rel)) continue;
-        }
-        let buf: Buffer;
-        try { buf = fs.readFileSync(file); } catch { continue; }
-        if (buf.byteLength > MAX_READ_BYTES || looksBinary(buf)) continue;
-        const lines = buf.toString("utf8").split("\n");
-        for (let n = 0; n < lines.length && results.length < MAX_GREP_RESULTS; n++) {
-          if (re.test(lines[n]!)) results.push(`${path.relative(cwd, file)}:${n + 1}: ${lines[n]!.trim().slice(0, 200)}`);
-        }
-      }
-      return { ok: true, output: results.length ? results.join("\n") : "(no matches)" };
+      try { new RegExp(pattern); } catch (e) { return { ok: false, output: `Invalid regex: ${(e as Error).message}` }; }
+      fs.statSync(root); // a clear "no such file" error before starting the worker
+      const r = await searchInWorker({ kind: "grep", root, cwd, pattern, glob: args.glob ? String(args.glob) : undefined }, options.signal);
+      if (r.error) return { ok: false, output: r.error };
+      return { ok: true, output: clip(searchOutput(r)) };
     }
 
     if (name === "clipboard") {
@@ -534,23 +494,23 @@ export async function executeTool(
           // linux: try wl-copy then xclip
           for (const c of [["wl-copy"], ["xclip", "-selection", "clipboard"]]) {
             try {
-              const r = spawnSync(c[0]!, c.slice(1), { input: text, encoding: "utf8", timeout: 10_000 });
+              const r = await runHelper(c[0]!, c.slice(1), { input: text, timeoutMs: 10_000 });
               if (r.status === 0) return { ok: true, output: "Copied to clipboard." };
             } catch { /* try next */ }
           }
           return { ok: false, output: "No clipboard tool found (install xclip or wl-clipboard)." };
         }
         const r = plat === "win32"
-          ? spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", cmd], { input: text, encoding: "utf8", timeout: 10_000 })
-          : spawnSync("pbcopy", [], { input: text, encoding: "utf8", timeout: 10_000 });
+          ? await runHelper("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", cmd], { input: text, timeoutMs: 10_000 })
+          : await runHelper("pbcopy", [], { input: text, timeoutMs: 10_000 });
         return r.status === 0 ? { ok: true, output: "Copied to clipboard." } : { ok: false, output: "Clipboard write failed." };
       }
       // read
       const r = plat === "win32"
-        ? spawnSync("powershell.exe", ["-NoProfile", "-Command", "Get-Clipboard"], { encoding: "utf8" })
+        ? await runHelper("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Clipboard -Raw"])
         : plat === "darwin"
-          ? spawnSync("pbpaste", [], { encoding: "utf8" })
-          : spawnSync("sh", ["-c", "wl-paste 2>/dev/null || xclip -selection clipboard -o 2>/dev/null"], { encoding: "utf8" });
+          ? await runHelper("pbpaste", [])
+          : await runHelper("sh", ["-c", "wl-paste 2>/dev/null || xclip -selection clipboard -o 2>/dev/null"]);
       if (r.status !== 0) return { ok: false, output: "Clipboard read failed." };
       return { ok: true, output: clip(String(r.stdout ?? ""), 5_000) || "(clipboard empty)" };
     }
@@ -592,14 +552,16 @@ export async function executeTool(
       }
       // trash when the platform supports it
       if (plat === "win32") {
-        const r = spawnSync("powershell.exe", ["-NoProfile", "-Command",
-          `Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.FileIO.FileSystem]::${fs.statSync(file).isDirectory() ? "DeleteDirectory" : "DeleteFile"}('${file.replace(/'/g, "''")}', 'OnlyErrorDialogs', 'SendToRecycleBin')`], { encoding: "utf8" });
+        // The path travels as data in an env var, never spliced into PowerShell code.
+        const r = await runHelper("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
+          `Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.FileIO.FileSystem]::${fs.statSync(file).isDirectory() ? "DeleteDirectory" : "DeleteFile"}($env:UNJAILED_TRASH_TARGET, 'OnlyErrorDialogs', 'SendToRecycleBin')`],
+          { env: { ...process.env, UNJAILED_TRASH_TARGET: file }, timeoutMs: 30_000 });
         if (r.status === 0) return { ok: true, output: `Sent ${p2} to the Recycle Bin.` };
       } else if (plat === "darwin") {
-        const r = spawnSync("osascript", ["-e", `tell application "Finder" to delete POSIX file ${JSON.stringify(file)}`], { encoding: "utf8" });
+        const r = await runHelper("osascript", ["-e", `tell application "Finder" to delete POSIX file ${JSON.stringify(file)}`], { timeoutMs: 30_000 });
         if (r.status === 0) return { ok: true, output: `Sent ${p2} to Trash.` };
       } else {
-        const r = spawnSync("gio", ["trash", file], { encoding: "utf8" });
+        const r = await runHelper("gio", ["trash", file], { timeoutMs: 30_000 });
         if (r.status === 0) return { ok: true, output: `Sent ${p2} to trash.` };
       }
       return { ok: false, output: `Trash unavailable for ${p2}; the file was preserved. Request permanent:true only if the user wants permanent deletion.` };

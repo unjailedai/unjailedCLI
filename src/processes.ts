@@ -83,10 +83,25 @@ export async function runLocalCommand(command: string, cwd: string, options: {
       cleanup();
       finish({ ok: false, output: `Failed to start command: ${err.message}` });
     });
+    let exitGrace: NodeJS.Timeout | undefined;
     child.once("close", (code, signal) => {
+      clearTimeout(exitGrace);
       if (job) job.status = stopped ?? `exited ${code ?? signal}`;
       cleanup();
       finish({ ok: code === 0 && !stopped, output: `${output.slice(-28_000) || "(no output)"}\n${stopped ?? `Exit code: ${code ?? signal}`}` });
+    });
+    // A program the command launched ("start npm run dev", "app &") inherits the
+    // output pipes and keeps them open, so "close" waits for THAT program — the
+    // agent used to sit there until the 10-minute timeout. Once the command
+    // itself has exited, stop waiting shortly after.
+    child.once("exit", (code, signal) => {
+      if (options.background) return;
+      exitGrace = setTimeout(() => {
+        cleanup();
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+        finish({ ok: code === 0 && !stopped, output: `${output.slice(-28_000) || "(no output)"}\n${stopped ?? `Exit code: ${code ?? signal}`}\n(A program it started is still running and its output is no longer captured. Use background:true for servers and long-running programs.)` });
+      }, 500);
     });
     options.signal?.addEventListener("abort", cancel, { once: true });
     if (options.signal?.aborted) cancel();

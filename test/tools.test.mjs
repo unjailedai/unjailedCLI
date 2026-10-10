@@ -158,3 +158,53 @@ test("unknown tool errors cleanly", async () => {
   assert.equal(r.ok, false);
   assert.ok(/Unknown tool/.test(r.output));
 });
+
+/* ── freezes: searches and helpers must never block the UI thread ── */
+
+/** Longest stretch the event loop (= the terminal UI) was blocked during fn. */
+async function longestBlock(fn) {
+  let last = Date.now(), worst = 0;
+  const iv = setInterval(() => { const now = Date.now(); worst = Math.max(worst, now - last); last = now; }, 10);
+  try { return { result: await fn(), worst }; } finally { clearInterval(iv); worst = Math.max(worst, Date.now() - last); }
+}
+
+test("a catastrophic regex runs off the UI thread and can be cancelled", async () => {
+  const dir = tmp();
+  fs.writeFileSync(path.join(dir, "evil.txt"), "a".repeat(40) + "!\n");
+  const ctrl = new AbortController();
+  setTimeout(() => ctrl.abort(), 300);
+  const t0 = Date.now();
+  const { result, worst } = await longestBlock(() =>
+    executeApprovedTool("grep", { pattern: "(a+)+$", path: "evil.txt" }, dir, undefined, { mode: "read", signal: ctrl.signal }));
+  assert.equal(result.ok, false);
+  assert.match(result.output, /cancelled/i);
+  assert.ok(Date.now() - t0 < 3000, "cancel ends the search promptly");
+  assert.ok(worst < 250, `UI thread blocked for ${worst} ms`);
+});
+
+test("glob/grep skip AppData-style trees unless searched directly, and say when they give up", async () => {
+  const dir = tmp();
+  fs.mkdirSync(path.join(dir, "AppData", "Local", "pkg"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "AppData", "Local", "pkg", "hidden.py"), "NEEDLE\n");
+  fs.writeFileSync(path.join(dir, "main.py"), "NEEDLE\n");
+  const g = await executeTool("glob", { pattern: "**/*.py" }, dir);
+  assert.match(g.output, /main\.py/);
+  assert.doesNotMatch(g.output, /hidden\.py/);
+  const direct = await executeTool("glob", { pattern: "**/*.py", path: "AppData" }, dir);
+  assert.match(direct.output, /hidden\.py/);
+  const none = await executeTool("grep", { pattern: "NOPE_NOT_HERE" }, dir);
+  assert.match(none.output, /no matches in 1 files/);
+});
+
+test("run_command returns when the command exits even if a program it started keeps running", async () => {
+  const dir = tmp();
+  // The grandchild inherits the output pipe and outlives the command by 6s.
+  const script = path.join(dir, "spawner.cjs");
+  fs.writeFileSync(script, `require("child_process").spawn(process.execPath, ["-e", "setTimeout(() => {}, 6000)"], { stdio: "inherit", detached: true }).unref(); console.log("launched");`);
+  const t0 = Date.now();
+  const r = await executeTool("run_command", { command: `"${process.execPath}" spawner.cjs` }, dir);
+  const took = Date.now() - t0;
+  assert.ok(took < 4000, `waited ${took} ms for a background program`);
+  assert.equal(r.ok, true);
+  assert.match(r.output, /launched/);
+});

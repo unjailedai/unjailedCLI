@@ -13,6 +13,8 @@
 //   "markdown"   → a long markdown sample with code blocks
 //   "longcode"   → an 80-line code block (tests the live-area height cap)
 //   "debug"      → reports the reasoning_effort and system prompt it received
+//   "mkfile"     → (agent tools on) calls write_file, then reports the tool result
+//   "slowfile"   → with mkfile: the write_file arguments stream in slowly
 
 import http from "node:http";
 
@@ -83,6 +85,44 @@ function readBody(req) {
 // Split text into small chunks that look like tokens.
 const tokens = (text) => text.match(/\s*\S+|\s+/g) ?? [];
 
+function toolPairingError(messages) {
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
+    if (m?.role !== "assistant" || !Array.isArray(m.tool_calls) || !m.tool_calls.length) continue;
+    const answered = new Set();
+    for (let j = i + 1; j < messages.length && messages[j]?.role === "tool"; j++) answered.add(messages[j].tool_call_id);
+    const missing = m.tool_calls.find((c) => !answered.has(c.id));
+    if (missing) return `An assistant message with 'tool_calls' must be followed by tool messages responding to each 'tool_call_id'. Missing: ${missing.id}`;
+  }
+  return null;
+}
+
+const sseChunk = (body, delta, finish = null) =>
+  `data: ${JSON.stringify({ id: "mock", object: "chat.completion.chunk", model: body.model, choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`;
+
+async function streamToolCall(res, body, name, args, chunkDelay = 5) {
+  res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" });
+  const id = `call_${Math.random().toString(36).slice(2, 10)}`;
+  const json = JSON.stringify(args);
+  res.write(sseChunk(body, { role: "assistant", tool_calls: [{ index: 0, id, type: "function", function: { name, arguments: "" } }] }));
+  // Arguments arrive in fragments, like real servers.
+  for (let i = 0; i < json.length; i += 12) {
+    res.write(sseChunk(body, { tool_calls: [{ index: 0, function: { arguments: json.slice(i, i + 12) } }] }));
+    await sleep(chunkDelay);
+  }
+  res.write(sseChunk(body, {}, "tool_calls"));
+  res.write("data: [DONE]\n\n");
+  res.end();
+}
+
+async function streamAnswer(res, body, text) {
+  res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" });
+  for (const t of tokens(text)) { res.write(sseChunk(body, { content: t })); await sleep(5); }
+  res.write(sseChunk(body, {}, "stop"));
+  res.write("data: [DONE]\n\n");
+  res.end();
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const log = (msg) => console.log(`${new Date().toISOString().slice(11, 19)} ${req.method} ${url.pathname} ${msg}`);
@@ -99,9 +139,34 @@ const server = http.createServer(async (req, res) => {
     if (!body || !Array.isArray(body.messages)) return apiError(res, 400, "messages array is required");
     if (!MODELS.includes(body.model)) return apiError(res, 404, `The model '${body.model}' does not exist.`, "model_not_found");
 
+    // Real OpenAI-compatible servers reject an assistant tool_calls message
+    // that is not answered by a tool message for every call id.
+    const pairing = toolPairingError(body.messages);
+    if (pairing) {
+      log(`400 ${pairing}`);
+      return apiError(res, 400, pairing);
+    }
+
     const last = String(body.messages.at(-1)?.content ?? "");
     const lower = last.toLowerCase();
     log(`model=${body.model} turns=${body.messages.length} "${last.slice(0, 40)}"`);
+
+    // Plan mode drafts: answer with the markdown numbering real models tend to use.
+    if (lower.includes("short numbered plan")) return streamAnswer(res, body, "**1.** Create mock-made.txt\n**2.** Report back");
+
+    // "mkfile" (with tools) → call write_file, then confirm once the result comes back.
+    const lastUser = String(body.messages.findLast((m) => m.role === "user" && !/^Plan approved/.test(m.content))?.content ?? "").toLowerCase();
+    if (Array.isArray(body.tools) && body.tools.length && lastUser.includes("mkfile")) {
+      const hasWrite = body.tools.some((t) => t?.function?.name === "write_file");
+      if (body.messages.at(-1)?.role === "tool") {
+        return streamAnswer(res, body, `Tool said: ${last.slice(0, 80)}`);
+      }
+      if (hasWrite) {
+        log("→ tool_call write_file");
+        // "slowfile": arguments trickle in for ~3s, like a model writing a big file
+        return streamToolCall(res, body, "write_file", { path: "mock-made.txt", content: "made by the mock\n" }, lastUser.includes("slowfile") ? 400 : 5);
+      }
+    }
 
     if (lower.includes("ratelimit")) return apiError(res, 429, "Rate limit: 30 requests/minute on your tier. Retry in 12s.", "rate_limit", { "retry-after": "12" });
     if (lower.includes("servererror")) return apiError(res, 500, "upstream exploded");

@@ -195,6 +195,45 @@ test("trimHistory shrinks old context without deleting messages or breaking tool
   assert.equal(h[h.length - 1].content, "finish now", "most recent user turn intact");
 });
 
+const { repairToolPairing, toPlainChat } = await import("../dist/api.js");
+const { planSteps } = await import("../dist/ui/plan.js");
+
+test("repairToolPairing keeps answered calls and reduces half-answered ones to text", () => {
+  const call = (id) => ({ id, type: "function", function: { name: "read_file", arguments: "{}" } });
+  const h = [
+    { role: "user", content: "go" },
+    { role: "assistant", content: "", tool_calls: [call("a")] },
+    { role: "tool", tool_call_id: "a", content: "ok" },
+    { role: "assistant", content: "two at once", tool_calls: [call("b"), call("c")] },
+    { role: "tool", tool_call_id: "b", content: "ok" }, // c never answered (turn cancelled)
+    { role: "tool", tool_call_id: "zzz", content: "orphan" },
+    { role: "user", content: "next" },
+  ];
+  repairToolPairing(h);
+  assert.deepEqual(h.map((m) => m.role), ["user", "assistant", "tool", "assistant", "user"]);
+  assert.equal(h[3].content, "two at once");
+  assert.equal(h[3].tool_calls, undefined);
+});
+
+test("toPlainChat drops tool traffic and merges adjacent assistant text", () => {
+  const plain = toPlainChat([
+    { role: "user", content: "make it" },
+    { role: "assistant", content: "Writing.", tool_calls: [{ id: "a", type: "function", function: { name: "write_file", arguments: "{}" } }] },
+    { role: "tool", tool_call_id: "a", content: "Wrote 3 chars" },
+    { role: "assistant", content: "Done." },
+  ]);
+  assert.deepEqual(plain, [{ role: "user", content: "make it" }, { role: "assistant", content: "Writing.\n\nDone." }]);
+});
+
+test("planSteps accepts markdown numbering and rejects drafts without a step 1", () => {
+  assert.deepEqual(planSteps("**1.** Read app.py\n**2.** Fix the bug"), ["1. Read app.py", "2. Fix the bug"]);
+  assert.deepEqual(planSteps("Here's the plan:\nStep 1: inspect\nStep 2) edit"), ["1. inspect", "2. edit"]);
+  assert.deepEqual(planSteps("- 1) a\n- 2) b"), ["1. a", "2. b"]);
+  assert.deepEqual(planSteps("I will just do it."), []);
+  assert.deepEqual(planSteps("2. starts late"), []);
+  assert.equal(planSteps(Array.from({ length: 12 }, (_, i) => `${i + 1}. s`).join("\n")).length, 8);
+});
+
 test("streamChat surfaces server token usage via onUsage and the result", async () => {
   let got = null;
   const res = await streamChat(BASE, KEY, "kimi-k3", [{ role: "user", content: "usage please" }], { onToken() {}, onUsage: (u) => (got = u) }, new AbortController().signal);

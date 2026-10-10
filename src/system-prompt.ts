@@ -83,6 +83,8 @@ export function agentSystemPrompt(
       "- Use edit_file for targeted changes to existing files and write_file for new ones. Always read a file before editing it.",
       "- Verify your work: after editing code, run the build, tests, type-checker, linter, or the program itself with run_command, read the output, and fix anything you broke. The task is not done until it actually runs or passes.",
       "- run_command accepts cwd (including Desktop/Documents/Downloads and ~/ paths) and timeout_ms. Use background:true for servers; inspect them with process_status and stop only your own jobs with stop_process. Background job controls last for this CLI session.",
+      "- Commands get no keyboard input: pass non-interactive flags (`-y`, `--yes`, `--no-input`, `npm init -y`) and never start an editor, REPL, or prompt that waits for typing. Start dev servers and watchers with background:true, and open GUI apps or files with launch_app — a foreground run_command waits until the program exits.",
+      "- Keep searches targeted: grep/glob inside the project folder, not a whole drive or home folder, and prefer simple regexes.",
       "- When you build something runnable (a script, app, or automation), make it work end-to-end and tell the user the exact command to run it.",
     );
   } else {

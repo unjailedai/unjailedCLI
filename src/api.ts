@@ -143,6 +143,9 @@ export interface StreamHandlers {
   onReasoning?: (text: string) => void;
   /** Fired once per request when the server reports token usage. */
   onUsage?: (usage: Usage) => void;
+  /** Tool-call arguments streaming in (e.g. a whole file for write_file) —
+   *  can take minutes with no visible text, so the UI shows this as progress. */
+  onToolArgs?: (name: string, chars: number) => void;
 }
 
 /** A function call the model wants made. Arguments stream in as fragments. */
@@ -314,6 +317,8 @@ export async function streamChat(
             if (tc.function?.name) slot.name = tc.function.name;
             if (typeof tc.function?.arguments === "string") slot.args += tc.function.arguments;
           }
+          const latest = [...toolAccum.values()].reverse().find((t) => t.name);
+          if (latest) handlers.onToolArgs?.(latest.name!, [...toolAccum.values()].reduce((n, t) => n + t.args.length, 0));
         }
       }
     }
@@ -352,6 +357,49 @@ export type AgentMessage =
   | { role: "assistant"; content: string; tool_calls?: Array<{ id: string; type: "function"; function: { name: string; arguments: string } }> }
   | { role: "tool"; tool_call_id: string; content: string };
 
+/** Fold an agent transcript into plain chat — no tool results, no tool_calls —
+ *  for requests sent without tools and for saved sessions. Consecutive
+ *  assistant messages are merged so roles still alternate. */
+export function toPlainChat(history: AgentMessage[]): ChatMessage[] {
+  const out: ChatMessage[] = [];
+  for (const m of history) {
+    if (m.role === "tool") continue;
+    if (m.role === "assistant") {
+      if (!m.content.trim()) continue;
+      const prev = out[out.length - 1];
+      if (prev?.role === "assistant") { prev.content += "\n\n" + m.content; continue; }
+      out.push({ role: "assistant", content: m.content });
+      continue;
+    }
+    out.push({ role: m.role, content: m.content });
+  }
+  return out;
+}
+
+/** Servers reject an assistant tool_calls message unless every call id is
+ *  answered by a tool message right after it (a cancelled turn can leave one
+ *  half-answered). Keep complete groups; reduce the rest to their text. */
+export function repairToolPairing(history: AgentMessage[]): void {
+  for (let i = 0; i < history.length; i++) {
+    const m = history[i]!;
+    if (m.role === "assistant" && m.tool_calls?.length) {
+      let j = i + 1;
+      const answered = new Set<string>();
+      for (; j < history.length; j++) {
+        const next = history[j]!;
+        if (next.role !== "tool") break;
+        answered.add(next.tool_call_id);
+      }
+      if (m.tool_calls.every((c) => answered.has(c.id))) { i = j - 1; continue; }
+      history.splice(i, j - i, ...(m.content.trim() ? [{ role: "assistant" as const, content: m.content }] : []));
+      i--;
+    } else if (m.role === "tool") {
+      history.splice(i, 1); // orphan result with no preceding call
+      i--;
+    }
+  }
+}
+
 export interface AgentHandlers extends StreamHandlers {
   onToolCall?: (name: string, args: string) => void;
   onToolResult?: (name: string, ok: boolean, output: string) => void;
@@ -382,6 +430,7 @@ export async function agentTurn(
   for (let round = 0; round < maxRounds; round++) {
     exhausted = round === maxRounds - 1;
     if (signal.aborted) throw new AbortedError();
+    repairToolPairing(history);
     trimHistory(history);
     let roundText = "";
     const res = await streamChatRetry(baseUrl, key, model, history as ChatMessage[], {
@@ -403,7 +452,11 @@ export async function agentTurn(
       }
     }
 
-    if (!res || res.toolCalls.length === 0) return lastText;
+    if (!res || res.toolCalls.length === 0) {
+      // The closing reply belongs in the transcript so the next turn sees it.
+      if (roundText.trim()) history.push({ role: "assistant", content: roundText });
+      return lastText;
+    }
 
     // record the assistant's tool_calls message
     history.push({

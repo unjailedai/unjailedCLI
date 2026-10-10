@@ -50,13 +50,13 @@ Type `/` to open the command menu. Use ↑/↓ to move, Enter or Tab to select, 
 | `/model <id>` | Switch straight to a model by its id. |
 | `/effort` | Set reasoning effort: `auto` (default; the model decides), `low`, `medium` or `high`. `/effort high` sets it directly. Remembered between runs. |
 | `/skills` | Switch skills on or off for this chat (Space toggles). `/skills <name>` toggles one; `/skills new <name>` creates one. |
-| `/tools` | Agent tools. No argument: the model can read files and list directories. `cmds` enables file changes, launches and commands with approval for each action; `yolo` skips asking; `off` disables. |
+| `/tools` | Agent tools. `cmds` (the default) lets the model change files, launch apps and run commands, with approval for each action; no argument switches to read-only; `yolo` skips asking; `off` is plain chat. |
 | `/api` | Show the base URL, masked key and current model, and run a live connection check. |
 | `/context` | Show token usage for this chat: current context size, the last turn's prompt/completion tokens, message count and model. Numbers come from the API (or a `~` estimate if the server sends none). The context size also shows live in the status line as `ctx 12.4k`. |
 | `/fun` | Toggle the fun effects — the startup wink, side snow and finish sparkle. `/fun off` turns them off; the choice is saved. Effects are off automatically when output is piped, `NO_COLOR` is set, or the terminal is small. |
 | `/update` | Update the CLI to the latest version from npm. |
 | `/auto` (`/bypass`) | Auto-approve tool calls — the agent stops asking and just works. `/auto off` restores confirmations in `cmds` mode. It does not expand `read`/`off` permissions; select `/tools cmds` to leave `yolo`. |
-| `/plan` | Plan mode: before writing files or running commands, the agent shows a numbered plan — Enter approves, Esc rejects. `/plan off` disables. |
+| `/plan` | Plan mode (off by default): before writing files or running commands, the agent shows a numbered plan — Enter approves, Esc rejects. `/plan off` disables. |
 | `/resume` | Pick up a previous chat from the current folder. `/resume 2` or `/resume <id>` jumps straight to one. |
 | `/sessions` | Browse saved chats from every folder: resume one, or press `d` to delete it. |
 | `/clear` | Start a new chat and clear the screen. The previous chat stays saved. |
@@ -103,16 +103,17 @@ Switched-on skills are sent as a system message with each request and re-read fr
 
 ## Agent tools
 
-`/tools` gives the model hands: it can read files and list directories on your
-machine, and answer using what it finds. It works the same on Linux, macOS and
-Windows.
+Agent tools give the model hands: it reads, writes and edits files and runs
+commands on your machine to do coding tasks, rather than pasting code into the
+chat. They are on by default in `cmds` mode, where you approve each change or
+command with `y`. It works the same on Linux, macOS and Windows.
 
 | Mode | What the model can do |
 |---|---|
 | `/tools` | **Read-only:** read files, list directories, glob-find files, grep contents, read clipboard, fetch web pages, inspect background jobs |
-| `/tools cmds` | **+ write:** write/edit/move/delete files, launch apps, run commands — you confirm each action with `y` |
+| `/tools cmds` | **Default. + write:** write/edit/move/delete files, launch apps, run commands — you confirm each action with `y` |
 | `/tools yolo` | Same as `cmds`, changes and commands run without confirmation |
-| `/tools off` | Plain chat (default) |
+| `/tools off` | Plain chat, no tools |
 
 The toolkit:
 
@@ -144,10 +145,17 @@ In `/tools cmds`, file writes/edits/moves/deletes, clipboard writes, app launche
 and commands require your approval. `/tools read` enforces read-only tools even
 if a model requests an unlisted tool. `/auto` and `/tools yolo` are explicit
 choices to skip prompts; `/auto` cannot unlock capabilities in read/off mode.
-Plan mode requires an approved plan before tasks in cmds/yolo mode; if planning
-fails, execution stops.
+Plan mode (opt-in with `/plan`) requires an approved plan before tasks in
+cmds/yolo mode; if planning fails, execution stops.
 
-Foreground commands default to a 10-minute timeout; `timeout_ms` can shorten it.
+`glob` and `grep` run in a background thread, so a huge folder or a slow regex never
+freezes the terminal: they skip `node_modules`, dot-folders and Windows `AppData`/`Program Files`
+trees (search one directly to include it), stop after 100,000 files or 20 seconds,
+and return what they found so far. While the agent works, the status line always
+shows what it is doing: thinking, writing a reply, preparing a file, running a
+tool, waiting for your approval, or waiting on a server that has gone quiet.
+
+Foreground commands default to a 10-minute timeout; `timeout_ms` can shorten it. A command returns when it exits, even if a program it started (`start ...`) is still running.
 Cancellation and timeouts kill the command's process tree. Output retains a
 bounded tail plus the exit status. For a development server, use
 `background: true`; the returned `job_id` works with `process_status` and
@@ -155,7 +163,7 @@ bounded tail plus the exit status. For a development server, use
 `.unjailed/bg-*.log` with a 100 KB disk cap. Job controls are not restored after
 restarting the CLI. Use an OS service manager for persistent services.
 
-Example: start with `/tools cmds`, then ask “Create a JavaScript app in my
+Example: ask “Create a JavaScript app in my
 Documents/demo folder, run it, and show me the output.” The agent can create,
 edit, execute, inspect and fix the program, with approval for each change or
 command. Use `/auto` only when you want those actions to run without prompts.
