@@ -37,6 +37,25 @@ export const theme = {
   dark: BRAND_DARK,
 };
 
+/** One color per kind of activity, used by the status line, the agents view
+ *  and tool blocks. Muted enough for long sessions, distinct at a glance. */
+export const tone = {
+  thinking: (s: string) => c.hex("#C4B5FD")(s), // violet
+  writing: (s: string) => c.hex(BRAND_BLUE)(s), // brand sky
+  tool: (s: string) => c.hex("#FCD34D")(s), // amber
+  read: (s: string) => c.hex("#93C5FD")(s), // light blue
+  edit: (s: string) => c.hex("#FDBA74")(s), // orange
+  shell: (s: string) => c.hex("#86EFAC")(s), // green
+  web: (s: string) => c.hex("#67E8F9")(s), // cyan
+  agent: (s: string) => c.hex("#F0ABFC")(s), // fuchsia
+  waiting: (s: string) => c.gray(s),
+  approval: (s: string) => c.yellow(s),
+  retrying: (s: string) => c.hex("#FB923C")(s), // deep orange
+  goal: (s: string) => c.hex("#F9A8D4")(s), // pink
+  done: (s: string) => c.green(s),
+  failed: (s: string) => c.red(s),
+};
+
 /** Color names for Ink <Text color>; undefined when color is off. */
 export const inkColor = (hex: string) => (colorLevel === 0 ? undefined : hex);
 

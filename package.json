@@ -1,7 +1,7 @@
 {
   "name": "unjailed",
   "version": "0.12.4",
-  "description": "Unjailed AI in your terminal \u2014 streaming chat CLI for unjailedai.com",
+  "description": "Unjailed AI in your terminal \u2014 streaming chat and coding agent CLI for unjailedai.com, with tools, subagents, workflows, goals and loops",
   "type": "module",
   "bin": {
     "unjailed": "dist/index.js"
@@ -30,7 +30,11 @@
     "terminal",
     "openai-compatible",
     "unjailed",
-    "llm"
+    "llm",
+    "agent",
+    "coding-agent",
+    "subagents",
+    "workflow"
   ],
   "homepage": "https://unjailedai.com",
   "repository": {

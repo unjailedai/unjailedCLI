@@ -53,12 +53,12 @@ test('CLI creates a folder and script and executes it only after separate file a
   await waitFor(()=>requests.length===1,'first agent request');
   assert.ok(requests[0].body.tools.some(t=>t.function.name==='write_file'));assert.ok(requests[0].body.tools.some(t=>t.function.name==='run_command'));
   send(requests[0],{tool_calls:[{index:0,id:'create-script',function:{name:'write_file',arguments:JSON.stringify({path:script,content:'console.log(Number(process.argv[2]) + Number(process.argv[3]));\n'})}}]},'tool_calls');done(requests[0]);
-  await waitFor(()=>/Waiting for permission/.test(ui.lastFrame()),'file write approval');assert.equal(fs.existsSync(script),false);
+  await waitFor(()=>/Permission needed/.test(ui.lastFrame()),'file write approval');assert.equal(fs.existsSync(script),false);
   await sleep(200);ui.stdin.write('y');
   await waitFor(()=>requests.length===2,'write completed');assert.equal(fs.readFileSync(script,'utf8'),'console.log(Number(process.argv[2]) + Number(process.argv[3]));\n');
   const quote=s=>'"'+s.replaceAll('"','\\"')+'"';
   send(requests[1],{tool_calls:[{index:0,id:'run-script',function:{name:'run_command',arguments:JSON.stringify({command:quote(process.execPath)+' '+quote(script)+' 2 3',cwd:root})}}]},'tool_calls');done(requests[1]);
-  await waitFor(()=>/Waiting for permission/.test(ui.lastFrame()),'execution approval');assert.equal(requests.length,2);
+  await waitFor(()=>/Permission needed/.test(ui.lastFrame()),'execution approval');assert.equal(requests.length,2);
   await sleep(200);ui.stdin.write('y');
   await waitFor(()=>requests.length===3,'command completed');
   const result=requests[2].body.messages.find(m=>m.role==='tool'&&m.tool_call_id==='run-script');assert.match(result.content,/5/);assert.match(result.content,/Exit code: 0/);

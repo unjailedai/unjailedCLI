@@ -2,6 +2,7 @@ import { highlight, supportsLanguage } from "cli-highlight";
 import { c, colorLevel } from "./theme.js";
 import { BRAND_BLUE } from "./constants.js";
 import stringWidth from "string-width";
+import { sanitizeForDisplay } from "./ui/sanitize.js";
 
 const RESET = colorLevel > 0 ? "\x1b[0m" : "";
 
@@ -87,29 +88,64 @@ function table(rows: string[][], aligns: ("left" | "right" | "center")[]): strin
 }
 
 /** Wrap a single rendered line to `cols` visible columns, ANSI-aware.
- *  Long unbroken lines (urls, paths, minified code) otherwise clip hard at
- *  the terminal edge on narrow windows consoles. */
-function wrapAnsiLine(line: string, cols: number): string[] {
+ *  Breaks at the last space when there is one (so words stay whole) and
+ *  indents continuation rows by `hang` columns, so a wrapped bullet's text
+ *  lines up under the text, not under the bullet. Long unbroken runs (urls,
+ *  paths, minified code) are split hard. */
+export function wrapAnsiLine(line: string, cols: number, hang = 0): string[] {
   if (cols < 20) return [line];
-  const parts: string[] = [];
-  let cur = "";
+  const tokens = line.match(/\x1b\[[0-9;]*m|./gsu) ?? [];
+  const rows: string[] = [];
+  let cur: string[] = [];
   let width = 0;
-  // split into (ansi, visible char) tokens
-  const tokens = line.match(/\x1b\[[0-9;]*m|./gu) ?? [];
-  for (const tok of tokens) {
-    if (tok.startsWith("\x1b")) { cur += tok; continue; }
-    const w = stringWidth(tok);
-    if (width + w > cols - 1) {
-      parts.push(cur);
-      cur = "";
-      width = 0;
-      // preserve leading bullet indent continuation
+  let lastSpace = -1; // index in `cur` of the last space token
+  let limit = cols - 1;
+  let active = ""; // SGR state carried onto continuation rows
+  const pad = " ".repeat(Math.min(hang, Math.floor(cols / 2)));
+  const flush = (upto: number) => {
+    rows.push(cur.slice(0, upto).join("").replace(/ +$/, "") + (colorLevel > 0 ? RESET : ""));
+    const rest = cur.slice(upto);
+    while (rest.length && rest[0] === " ") rest.shift();
+    cur = [];
+    width = 0;
+    lastSpace = -1;
+    limit = cols - 1 - pad.length;
+    if (pad) cur.push(pad);
+    if (active) cur.push(active);
+    width = pad.length;
+    for (const t of rest) push(t);
+  };
+  const push = (tok: string) => {
+    if (tok.startsWith("\x1b")) {
+      cur.push(tok);
+      active = tok === "\x1b[0m" || tok === "\x1b[m" ? "" : active + tok;
+      return;
     }
-    cur += tok;
+    const w = stringWidth(tok);
+    if (width + w > limit && width > pad.length) {
+      // Break at the last space if it leaves a reasonable first part.
+      if (tok !== " " && lastSpace > 0 && lastSpace > (pad ? 1 : 0)) {
+        flush(lastSpace);
+      } else {
+        flush(cur.length);
+        if (tok === " ") return;
+      }
+    }
+    if (tok === " ") lastSpace = cur.length;
+    cur.push(tok);
     width += w;
-  }
-  parts.push(cur);
-  return parts;
+  };
+  for (const tok of tokens) push(tok);
+  rows.push(cur.join(""));
+  return rows;
+}
+
+/** Columns a wrapped markdown line should hang by: under the text after a
+ *  bullet, number or quote bar. */
+function hangOf(line: string): number {
+  const plain = line.replace(/\x1b\[[0-9;]*m/g, "");
+  const m = plain.match(/^(\s*(?:[•☐☑]|\d+\.|▎)\s+)/);
+  return m ? stringWidth(m[1]!) : (plain.match(/^\s*/)?.[0].length ?? 0);
 }
 
 /**
@@ -124,7 +160,7 @@ export function renderMarkdown(src: string, opts: { width?: number; highlightCod
   const effWidth = opts.width ?? (process.stdout.columns || 80);
   const boxW = Math.max(24, Math.min(effWidth - 3, 120));
 
-  const lines = src.replace(/\r\n?/g, "\n").split("\n");
+  const lines = sanitizeForDisplay(src).split("\n");
   const out: string[] = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
@@ -210,6 +246,6 @@ export function renderMarkdown(src: string, opts: { width?: number; highlightCod
   // Width-wrap: box lines are already sized to fit, so wrapAnsiLine returns them
   // intact; only over-long prose/urls actually get broken.
   return tidy
-    .flatMap((l) => (l.includes("\x1b") || stringWidth(l) > effWidth - 1 ? wrapAnsiLine(l, effWidth) : [l]))
+    .flatMap((l) => (stringWidth(l) > effWidth - 1 ? wrapAnsiLine(l, effWidth, hangOf(l)) : [l]))
     .join("\n");
 }

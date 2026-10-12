@@ -128,10 +128,10 @@ test("agent system prompt: environment + finish-the-task contract, mode-aware", 
 
   // cmds/yolo get the verify-your-work step and OS command guidance
   assert.match(cmds, /Verify your work/i);
-  assert.match(cmds, /Commands:/);
+  assert.match(cmds, /# Commands/);
 
   // confirmation wording differs by autonomy
-  assert.match(cmds, /shown to the user to approve/i);
+  assert.match(cmds, /approves each change/i);
   assert.match(yolo, /without a confirmation prompt/i);
 });
 

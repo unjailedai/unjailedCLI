@@ -14,6 +14,8 @@ export interface StoredConfig {
   plan?: boolean;
   /** Fun visual effects (startup wink, side snow, finish sparkle). Default on. */
   fx?: boolean;
+  /** Show the model's thinking, subagent steps and full tool output (/verbose). */
+  verbose?: boolean;
   /** true = a broken UNJAILED_API_KEY env var was bypassed; the saved key wins. */
   ignoreEnvKey?: boolean;
 }
@@ -60,6 +62,7 @@ export function readConfig(): StoredConfig {
   if (raw.autoMode === "auto" || raw.autoMode === "ask") cfg.autoMode = raw.autoMode;
   if (typeof raw.plan === "boolean") cfg.plan = raw.plan;
   if (typeof raw.fx === "boolean") cfg.fx = raw.fx;
+  if (typeof raw.verbose === "boolean") cfg.verbose = raw.verbose;
   if (raw.ignoreEnvKey === true) cfg.ignoreEnvKey = true;
   if (!cfg.apiKey) {
     const legacy = readJson(legacyAuthPath());

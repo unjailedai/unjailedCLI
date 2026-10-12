@@ -18,7 +18,28 @@ export interface Session {
   toolHistory?: ToolEvent[];
   revision?: string;
   skills?: string[]; // skills that were switched on, restored by /resume
+  /** A turn that was still running at the last save (the CLI was closed or
+   *  killed mid-run): its partial reply, restored by /resume. */
+  pending?: PendingTurn;
+  /** An active /goal, restored (paused) by /resume. */
+  goal?: { condition: string; turns: number; maxTurns: number; startedAt: number; lastReason?: string };
+  /** An active /loop, restored (paused) by /resume. */
+  loop?: { prompt: string; intervalMs: number | null; iteration: number };
+  /** Recent prompts typed in this chat, for ↑ history after a restart. */
+  inputs?: string[];
+  /** Running totals shown by /stats and the verbose stats panel. */
+  stats?: Record<string, number>;
 }
+
+export interface PendingTurn {
+  startedAt: number;
+  /** Assistant text streamed so far (bounded). */
+  partial: string;
+}
+
+/** Cap on the partial reply kept for an interrupted turn. */
+export const MAX_PENDING_CHARS = 60_000;
+export const MAX_SAVED_INPUTS = 200;
 
 export type SessionMeta = Omit<Session, "messages" | "toolHistory"> & { count: number };
 
@@ -67,6 +88,11 @@ function parse(raw: string): Session | null {
       notes: Array.isArray(s.notes) ? s.notes.filter((x: unknown): x is string => typeof x === "string").slice(-20) : [],
       toolHistory: Array.isArray(s.toolHistory) ? s.toolHistory.filter(validToolEvent) : [],
       skills: Array.isArray(s.skills) ? s.skills.filter((x: unknown): x is string => typeof x === "string") : [],
+      pending: s.pending && typeof s.pending === "object" && typeof s.pending.partial === "string" && Number.isFinite(s.pending.startedAt) ? { startedAt: s.pending.startedAt, partial: s.pending.partial.slice(-MAX_PENDING_CHARS) } : undefined,
+      goal: s.goal && typeof s.goal.condition === "string" && Number.isFinite(s.goal.turns) && Number.isFinite(s.goal.maxTurns) ? { condition: s.goal.condition, turns: s.goal.turns, maxTurns: s.goal.maxTurns, startedAt: Number(s.goal.startedAt) || 0, lastReason: typeof s.goal.lastReason === "string" ? s.goal.lastReason : undefined } : undefined,
+      loop: s.loop && typeof s.loop.prompt === "string" && (s.loop.intervalMs === null || Number.isFinite(s.loop.intervalMs)) ? { prompt: s.loop.prompt, intervalMs: s.loop.intervalMs, iteration: Number(s.loop.iteration) || 0 } : undefined,
+      inputs: Array.isArray(s.inputs) ? s.inputs.filter((x: unknown): x is string => typeof x === "string").slice(-MAX_SAVED_INPUTS) : undefined,
+      stats: s.stats && typeof s.stats === "object" && !Array.isArray(s.stats) ? Object.fromEntries(Object.entries(s.stats).filter((e): e is [string, number] => typeof e[1] === "number" && Number.isFinite(e[1]))) : undefined,
       messages: s.messages.filter(
         (m: unknown): m is ChatMessage =>
           !!m && typeof (m as ChatMessage).content === "string" && ["user", "assistant", "system"].includes((m as ChatMessage).role),

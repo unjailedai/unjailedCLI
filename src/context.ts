@@ -8,6 +8,8 @@ export interface ToolEvent {
   ok: boolean;
   output: string;
   at: number;
+  /** Number of chat messages when the tool ran, to replay it in place on /resume. */
+  turn?: number;
 }
 const STOP = new Set("the and that this with from have what when where which your about please could would should then just make keep doing continue next task work some using need want into file files code only also there been were will they them these those how for are was but not you can our use fix now".split(" "));
 function terms(text: string): Set<string> {
