@@ -1,0 +1,51 @@
+{
+  "version": "0.12.5",
+  "hostPlatform": "linux",
+  "realTerminal": true,
+  "localMockModelOnly": true,
+  "permissionPickerVisible": true,
+  "pickerCancellationRetainsReadOnly": true,
+  "deniedWriteCreatedFile": false,
+  "fileAndCommandRequiredSeparateApprovals": true,
+  "pythonProgramOutput": "a: b: 5.0\n\nExit code: 0",
+  "pythonInput": [
+    2,
+    3
+  ],
+  "customerMutations": 0,
+  "windowsPhysicalDeviceTested": false,
+  "actionPromiseRecovered": true,
+  "model": "glm-5.3-abliterated",
+  "publishedArtifactMatchesTestedBuild": {
+    "api.js": true,
+    "tools.js": true,
+    "constants.js": true,
+    "system-prompt.js": true,
+    "ui/App.js": true,
+    "updater.js": true
+  },
+  "registryVersion": "0.12.5",
+  "localTests": {
+    "passed": 94,
+    "failed": 0
+  },
+  "crossPlatformCI": {
+    "url": "https://github.com/unjailedai/unjailedCLI/actions/runs/38361682461",
+    "sourceCommit": "4d293308628b854d47753ef26e0e8f12aa54f7a5",
+    "windowsOS": "Windows Server 2025",
+    "windowsPassed": 93,
+    "windowsSkipped": 1,
+    "windowsFailed": 0,
+    "allJobsSucceeded": true,
+    "jobs": [
+      "Windows Node 22",
+      "macOS Node 22",
+      "Ubuntu Node 22",
+      "Ubuntu Node 20"
+    ]
+  },
+  "deadlinesSeconds": {
+    "noAnswerOrToolProgress": 180,
+    "absolutePerResponse": 360
+  }
+}
