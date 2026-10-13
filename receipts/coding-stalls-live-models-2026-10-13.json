@@ -1,0 +1,290 @@
+{
+  "at": "2026-10-13T07:15:52.515Z",
+  "fixture": "35-file CommonJS project with CRLF; percentage feature fix and tests; 4096 tokens/response, 8 rounds; separate independent assertions",
+  "results": [
+    {
+      "model": "glm-5.3-abliterated",
+      "elapsedSeconds": 49,
+      "requests": [
+        {
+          "messages": 2,
+          "characters": 658
+        },
+        {
+          "messages": 4,
+          "characters": 924
+        },
+        {
+          "messages": 7,
+          "characters": 2163
+        },
+        {
+          "messages": 11,
+          "characters": 3390
+        },
+        {
+          "messages": 14,
+          "characters": 5162
+        },
+        {
+          "messages": 16,
+          "characters": 5835
+        }
+      ],
+      "actions": [
+        {
+          "name": "list_dir",
+          "ok": true,
+          "summary": "README.md\npackage.json\nsrc/\ntest/"
+        },
+        {
+          "name": "glob",
+          "ok": true,
+          "summary": "README.md\npackage.json\nsrc/module0.cjs\nsrc/module1.cjs\nsrc/module10.cjs\nsrc/module11.cjs\nsrc/module12.cjs\nsrc/module13.c"
+        },
+        {
+          "name": "read_file",
+          "ok": true,
+          "summary": "Existing Node CommonJS project. Pricing uses integer cents. Run node --test test/pricing.test.cjs. Fix percentage discou"
+        },
+        {
+          "name": "read_file",
+          "ok": true,
+          "summary": "function total(items, discountPercent = 0) {\r\n  const subtotal = items.reduce((sum, item) => sum + item.priceCents * ite"
+        },
+        {
+          "name": "read_file",
+          "ok": true,
+          "summary": "const {test}=require('node:test');\r\nconst assert=require('node:assert/strict');\r\nconst {total}=require('../src/pricing.c"
+        },
+        {
+          "name": "read_file",
+          "ok": true,
+          "summary": "{\"name\":\"fixture\",\"scripts\":{\"test\":\"node --test test/pricing.test.cjs\"}}"
+        },
+        {
+          "name": "write_file",
+          "ok": true,
+          "summary": "Wrote 319 chars to src/pricing.cjs"
+        },
+        {
+          "name": "write_file",
+          "ok": true,
+          "summary": "Wrote 734 chars to test/pricing.test.cjs"
+        },
+        {
+          "name": "run_command",
+          "ok": true,
+          "summary": "\u2714 percentage discount (0.52374ms)\n\u2714 0% discount keeps full price (0.08037ms)\n\u2714 100% discount is free (0.07642ms)\n\u2714 negat"
+        }
+      ],
+      "reasoningChars": 130,
+      "error": null,
+      "independentAssertionsPassed": true,
+      "oracleSummary": "6 independent pricing assertions passed",
+      "visibleTail": "      // clamp 0\u2013100\n  const subtotal = items.reduce((sum, item) => sum + item.priceCents * item.quantity, 0);\n  const discount = Math.round(subtotal * pct / 100);           // round to nearest cent\n  return Math.max(0, subtotal - discount);\n}\n```\n\n**Tests added** (all pass, 6/6):\n- 2 \u00d7 1000 at 10% \u2192 1800 \u2713 (existing, now actually passes)\n- 0% \u2192 2000, 100% \u2192 0\n- -25% clamps to 0% \u2192 2000, 150% clamps to 100% \u2192 0\n- 999 at 15% \u2192 849 (999 \u00d7 0.85 = 849.15, rounds to 849) \u2713\n\nExit code 0 \u2014 no failures.",
+      "hostPlatform": "linux",
+      "physicalWindowsTested": false,
+      "customerMutations": 0
+    },
+    {
+      "model": "deepseek-v4.1-flash",
+      "elapsedSeconds": 46,
+      "requests": [
+        {
+          "messages": 2,
+          "characters": 658
+        },
+        {
+          "messages": 5,
+          "characters": 1228
+        },
+        {
+          "messages": 8,
+          "characters": 1786
+        },
+        {
+          "messages": 13,
+          "characters": 3443
+        },
+        {
+          "messages": 16,
+          "characters": 4425
+        },
+        {
+          "messages": 18,
+          "characters": 5204
+        },
+        {
+          "messages": 21,
+          "characters": 7075
+        },
+        {
+          "messages": 23,
+          "characters": 7762
+        }
+      ],
+      "actions": [
+        {
+          "name": "glob",
+          "ok": true,
+          "summary": "(no matches)"
+        },
+        {
+          "name": "list_dir",
+          "ok": true,
+          "summary": "README.md\npackage.json\nsrc/\ntest/"
+        },
+        {
+          "name": "list_dir",
+          "ok": true,
+          "summary": "module0.cjs\nmodule1.cjs\nmodule10.cjs\nmodule11.cjs\nmodule12.cjs\nmodule13.cjs\nmodule14.cjs\nmodule15.cjs\nmodule16.cjs\nmodul"
+        },
+        {
+          "name": "list_dir",
+          "ok": true,
+          "summary": "pricing.test.cjs"
+        },
+        {
+          "name": "read_file",
+          "ok": true,
+          "summary": "{\"name\":\"fixture\",\"scripts\":{\"test\":\"node --test test/pricing.test.cjs\"}}"
+        },
+        {
+          "name": "read_file",
+          "ok": true,
+          "summary": "Existing Node CommonJS project. Pricing uses integer cents. Run node --test test/pricing.test.cjs. Fix percentage discou"
+        },
+        {
+          "name": "read_file",
+          "ok": true,
+          "summary": "function total(items, discountPercent = 0) {\r\n  const subtotal = items.reduce((sum, item) => sum + item.priceCents * ite"
+        },
+        {
+          "name": "read_file",
+          "ok": true,
+          "summary": "const {test}=require('node:test');\r\nconst assert=require('node:assert/strict');\r\nconst {total}=require('../src/pricing.c"
+        },
+        {
+          "name": "grep",
+          "ok": true,
+          "summary": "src/pricing.cjs:1: function total(items, discountPercent = 0) {\nsrc/pricing.cjs:2: const subtotal = items.reduce((sum, i"
+        },
+        {
+          "name": "edit_file",
+          "ok": true,
+          "summary": "Replaced 1 occurrence in src/pricing.cjs"
+        },
+        {
+          "name": "edit_file",
+          "ok": true,
+          "summary": "Replaced 1 occurrence in test/pricing.test.cjs"
+        },
+        {
+          "name": "run_command",
+          "ok": true,
+          "summary": "\u2714 percentage discount (0.524191ms)\n\u2714 0% discount leaves subtotal unchanged (0.08655ms)\n\u2714 100% discount is free (0.15828m"
+        }
+      ],
+      "reasoningChars": 1704,
+      "error": null,
+      "independentAssertionsPassed": true,
+      "oracleSummary": "6 independent pricing assertions passed",
+      "visibleTail": "ntPercent`) instead of being applied as a percentage, with no clamping or rounding. Now it:\n- clamps the percent to `0..100`\n- computes `discount = Math.round(subtotal * percent / 100)`\n- returns `subtotal - discount`\n\n**`test/pricing.test.cjs`** \u2014 added coverage for 0%, 100%, negative (clamped to 0%), over-100 (clamped to 100%), and rounding (999 cents at 15% \u2192 849, since 999\u00d70.15 = 149.85 \u2192 150).\n\n```\ntests 6  pass 6  fail 0\n```\n\nThe exported API (`total(items, discountPercent)`) is unchanged.",
+      "hostPlatform": "linux",
+      "physicalWindowsTested": false,
+      "customerMutations": 0
+    }
+  ],
+  "targetedEditTrial": {
+    "at": "2026-10-13T07:17:36.735Z",
+    "fixture": "35-file CommonJS project with CRLF; percentage feature fix and tests; 4096 tokens/response, 8 rounds; separate independent assertions",
+    "results": [
+      {
+        "model": "glm-5.3-abliterated",
+        "elapsedSeconds": 59,
+        "requests": [
+          {
+            "messages": 2,
+            "characters": 658
+          },
+          {
+            "messages": 5,
+            "characters": 1202
+          },
+          {
+            "messages": 9,
+            "characters": 2429
+          },
+          {
+            "messages": 12,
+            "characters": 4568
+          },
+          {
+            "messages": 15,
+            "characters": 6315
+          },
+          {
+            "messages": 17,
+            "characters": 7059
+          }
+        ],
+        "actions": [
+          {
+            "name": "list_dir",
+            "ok": true,
+            "summary": "README.md\npackage.json\nsrc/\ntest/"
+          },
+          {
+            "name": "glob",
+            "ok": true,
+            "summary": "src/pricing.cjs\ntest/pricing.test.cjs"
+          },
+          {
+            "name": "read_file",
+            "ok": true,
+            "summary": "function total(items, discountPercent = 0) {\r\n  const subtotal = items.reduce((sum, item) => sum + item.priceCents * ite"
+          },
+          {
+            "name": "read_file",
+            "ok": true,
+            "summary": "const {test}=require('node:test');\r\nconst assert=require('node:assert/strict');\r\nconst {total}=require('../src/pricing.c"
+          },
+          {
+            "name": "read_file",
+            "ok": true,
+            "summary": "{\"name\":\"fixture\",\"scripts\":{\"test\":\"node --test test/pricing.test.cjs\"}}"
+          },
+          {
+            "name": "edit_file",
+            "ok": true,
+            "summary": "Replaced 1 occurrence in src/pricing.cjs"
+          },
+          {
+            "name": "edit_file",
+            "ok": true,
+            "summary": "Replaced 1 occurrence in test/pricing.test.cjs"
+          },
+          {
+            "name": "run_command",
+            "ok": true,
+            "summary": "npm notice run test\nnpm notice run node --test test/pricing.test.cjs\n\u2714 percentage discount (0.480321ms)\n\u2714 0% discount le"
+          }
+        ],
+        "reasoningChars": 95,
+        "error": null,
+        "independentAssertionsPassed": true,
+        "oracleSummary": "6 independent pricing assertions passed",
+        "visibleTail": "t value (2\u00d71000 \u2212 10 = 1990), with no clamping or rounding.\n\n**The fix:**\n```js\nconst pct = Math.min(100, Math.max(0, discountPercent)); // clamp 0\u2013100\nconst discount = Math.round(subtotal * pct / 100);      // round to nearest cent\nreturn Math.max(0, subtotal - discount);\n```\n\n**Tests added** (all passing):\n- 2\u00d71000 @ 10% \u2192 1800 (the original failing case)\n- 0% \u2192 2000 (no change)\n- 100% \u2192 0\n- \u221225% \u2192 2000 (clamped to 0)\n- 150% \u2192 0 (clamped to 100)\n- 999 @ 15% \u2192 849 (rounds 149.85 \u2192 150 discount)",
+        "hostPlatform": "linux",
+        "physicalWindowsTested": false,
+        "customerMutations": 0
+      }
+    ]
+  },
+  "limitations": [
+    "Synthetic 35-file project, not the customer project or a 50-minute session.",
+    "Model tests executed on Linux with CRLF fixture files and Windows command guidance; no physical Windows 10 device.",
+    "Local proxy supplied matching GLM low/clear_thinking controls and a 4096-token ceiling. Actual hosted model used; customer auth/billing route not exercised."
+  ]
+}
