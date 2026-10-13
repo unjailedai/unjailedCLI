@@ -213,6 +213,8 @@ command. Use `/auto` only when you want those actions to run without prompts.
 | `UNJAILED_MODEL` | Model to start with |
 | `UNJAILED_HOME` | Config directory (default `~/.unjailed`) |
 | `UNJAILED_TIMEOUT` | Request/stream timeout in seconds (default 120 — reasoning models can think for a while before the first token) |
+| `UNJAILED_REASONING_TIMEOUT` | Maximum time without answer/tool-argument progress (default 180 seconds; reasoning and heartbeats do not extend it) |
+| `UNJAILED_RESPONSE_TIMEOUT` | Absolute time limit per model response (default 360 seconds; does not limit the whole task or local commands) |
 | `UNJAILED_NO_HISTORY` | Set to `1` to stop saving chats (disables `/resume`) |
 | `UNJAILED_NO_FX` | Set to `1` to turn off the fun effects (wink, snow, sparkle) |
 | `NO_COLOR` | Turn off colors (also turns off the fun effects) |
@@ -261,10 +263,14 @@ The default API URL is set in `src/constants.ts` (`DEFAULT_BASE_URL`).
 
 MIT · [github.com/unjailedai/unjailedCLI](https://github.com/unjailedai/unjailedCLI)
 
-### Coding reliability (0.12.4)
+### Coding reliability (0.12.5)
 
 Update with `/update` or `npm install -g unjailed@latest`. Enable file and command access with `/tools cmds`; every change and command still asks for approval unless you explicitly enable automatic approval.
 
 The CLI now continues when a model announces work without a tool call, with at most two recovery attempts and a clear failure message. It rejects incomplete tool arguments, preserves final streamed tool calls, supports line ranges in `read_file`, and preserves Windows CRLF and literal dollar characters in edits. Targeted edits and ranged reads support files up to 5 MB; individual full writes and replacements retain a 200 KB limit.
 
-GLM 5.3 CLI requests default to low reasoning on the hosted API. `/effort high` remains available; the CLI's medium level maps to GLM's high level. Streams producing no answer or tool call stop after 180 seconds by default. Set `UNJAILED_REASONING_TIMEOUT` in seconds to override that deadline; `UNJAILED_TIMEOUT` controls header and idle timeouts (default 120 seconds). These controls improve response handling but cannot guarantee a model completes every task.
+GLM 5.3 CLI requests default to low reasoning on the hosted API. `/effort high` remains available; the CLI's medium level maps to GLM's high level. A stream stops after 180 seconds without new answer/tool-argument progress, including after a short preamble. Reasoning, heartbeats and empty tool frames cannot extend that deadline. Each response also has a 360-second absolute ceiling. Completed changes remain on disk; incomplete timed-out calls do not execute. These deadlines apply per response, so a productive multi-step project can continue longer. Set `UNJAILED_REASONING_TIMEOUT` or `UNJAILED_RESPONSE_TIMEOUT` in seconds to override; `UNJAILED_TIMEOUT` controls header and idle timeouts (default 120 seconds).
+
+Repeated identical failed file changes are blocked and returned to the model with instructions to read current text and correct its arguments. Three attempts at the same failed change stop the turn visibly. Requests release their abort listeners after completion, avoiding listener accumulation in long tool sessions. These are client fixes, not a guarantee that every model completes every project.
+
+For Windows 10 coding: update, close and reopen the CLI, verify `unjailed --version`, then select `/tools cmds` and `/effort low`. If GLM Abliterated still stalls, try `/model deepseek-v4.1-flash` or `/model glm-5.3` on the same task. Third-party authenticated API clients can use the uncensored models too; the [OpenCode setup guide](https://unjailedai.com/docs#opencode) shows the existing API key and endpoint configuration. Local runtimes such as Python or Node must be installed for execution.

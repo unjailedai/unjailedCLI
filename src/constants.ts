@@ -28,3 +28,7 @@ export const VERSION: string = (() => {
 
 const reasoningSeconds = Number(process.env.UNJAILED_REASONING_TIMEOUT);
 export const REASONING_TIMEOUT_MS = (Number.isFinite(reasoningSeconds) && reasoningSeconds > 0 ? reasoningSeconds : 180) * 1000;
+
+const responseSeconds = Number(process.env.UNJAILED_RESPONSE_TIMEOUT);
+/** Per model response, not the whole coding task or a local command. */
+export const RESPONSE_TIMEOUT_MS = (Number.isFinite(responseSeconds) && responseSeconds > 0 ? responseSeconds : 360) * 1000;

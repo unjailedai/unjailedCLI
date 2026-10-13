@@ -25,9 +25,38 @@ test('announced fix continues to real tool execution; malformed JSON never execu
 });
 test('persistent promises stop visibly after two recoveries',async()=>{await fixture(async(base,requests)=>{let output='';await agentTurn(base,'fake','m',[{role:'user',content:'Create a script'}],{onToken:t=>output+=t},new AbortController().signal,{tools:toolDefinitions('cmds'),execute:async()=>{throw Error('must not execute');}});assert.equal(requests.length,3);assert.match(output,/no success is implied/);},res=>res.end(event({content:"I'll now create the script:"},'stop')+'\n\n'));});
 test('completed prose, questions and denied permissions do not force actions',async()=>{for(const content of ['Finished the changes.','Would you like me to fix this?','I cannot edit without permission.'])await fixture(async(base,requests)=>{await agentTurn(base,'fake','m',[{role:'user',content:'Fix code'}],{onToken(){}},new AbortController().signal,{tools:toolDefinitions('cmds'),execute:async()=>{throw Error('must not execute');}});assert.equal(requests.length,1);},res=>res.end(event({content},'stop')+'\n\n'));});
-test('reasoning heartbeat cannot evade deadline; productive answer clears it',async()=>{
+test('reasoning heartbeat cannot evade deadline; continuing answer progress extends it',async()=>{
  await fixture(async base=>{await assert.rejects(streamChat(base,'fake','m',[],{onToken(){},onReasoning(){}},new AbortController().signal,{reasoningTimeoutMs:50}),/reasoning deadline/);},res=>{const timer=setInterval(()=>res.write(event({reasoning_content:'thinking'})+'\n\n'),5);res.on('close',()=>clearInterval(timer));});
- await fixture(async base=>{let output='';await streamChat(base,'fake','m',[],{onToken:t=>output+=t},new AbortController().signal,{reasoningTimeoutMs:60});assert.equal(output,'workingdone');},res=>{res.write(event({content:'working'})+'\n\n');setTimeout(()=>res.end(event({content:'done'},'stop')+'\n\n'),90);});
+ await fixture(async base=>{let output='';await streamChat(base,'fake','m',[],{onToken:t=>output+=t},new AbortController().signal,{reasoningTimeoutMs:100});assert.equal(output,'workingstilldone');},res=>{res.write(event({content:'working'})+'\n\n');setTimeout(()=>res.write(event({content:'still'})+'\n\n'),60);setTimeout(()=>res.end(event({content:'done'},'stop')+'\n\n'),120);});
+});
+
+test('a preamble followed by reasoning or empty tool frames cannot disable the progress deadline',async()=>{
+ for(const delta of [{reasoning_content:'still thinking'},{tool_calls:[{index:0}]}]) await fixture(async base=>{
+  await assert.rejects(streamChat(base,'fake','m',[],{onToken(){},onReasoning(){}},new AbortController().signal,{reasoningTimeoutMs:60}),/reasoning deadline/);
+ },res=>{res.write(event({content:"I'll start now."})+'\n\n');const timer=setInterval(()=>res.write(event(delta)+'\n\n'),5);res.on('close',()=>clearInterval(timer));});
+});
+test('absolute deadline stops endless productive fragments and never executes partial calls',async()=>{
+ await fixture(async base=>{await assert.rejects(streamChat(base,'fake','m',[],{onToken(){}},new AbortController().signal,{reasoningTimeoutMs:100,responseTimeoutMs:80}),/response deadline/);},res=>{res.write(event({tool_calls:[{index:0,function:{name:'write_file',arguments:'{"path":"a","content":"'}}]})+'\n\n');const timer=setInterval(()=>res.write(event({tool_calls:[{index:0,function:{arguments:'x'}}]})+'\n\n'),5);res.on('close',()=>clearInterval(timer));});
+});
+test('repeated failed edits do not execute again, stop visibly, and keep all call/results paired',async()=>{
+ let executed=0,output=''; await fixture(async(base,requests)=>{
+  const history=[{role:'user',content:'Fix the code'}];await agentTurn(base,'fake','m',history,{onToken:t=>output+=t},new AbortController().signal,{tools:toolDefinitions('cmds'),execute:async()=>{executed++;return{ok:false,output:'old_text not found'};}});
+  assert.equal(executed,1);assert.equal(requests.length,3);assert.match(output,/same failed file change/);
+  assert.equal(history.filter(m=>m.role==='tool').length,3);
+ },(res,n)=>res.end(event({tool_calls:[{id:'edit'+n,function:{name:'edit_file',arguments:JSON.stringify(n%2?{path:'a',old_text:'x',new_text:'y'}:{new_text:'y',old_text:'x',path:'a'})}}]},'tool_calls')+'\n\n'));
+});
+test('failed edit can recover by reading current text and sending a corrected change',async()=>{
+ let changes=0;await fixture(async(base,requests)=>{await agentTurn(base,'fake','m',[{role:'user',content:'Fix the code'}],{onToken(){}},new AbortController().signal,{tools:toolDefinitions('cmds'),execute:async(name,args)=>{if(name==='read_file')return{ok:true,output:'current'};changes++;return args.old_text==='current'?{ok:true,output:'Changed'}:{ok:false,output:'old_text not found'};}});assert.equal(changes,2);assert.equal(requests.length,4);},(res,n)=>res.end(event(n===4?{content:'Done.'}:{tool_calls:[{id:'c'+n,function:{name:n===2?'read_file':'edit_file',arguments:JSON.stringify(n===2?{path:'a'}:{path:'a',old_text:n===1?'stale':'current',new_text:'fixed'})}}]},n===4?'stop':'tool_calls')+'\n\n'));
+});
+test('completed requests release outer abort listeners throughout a long session',async()=>{
+ const {getEventListeners}=await import('node:events');const ctrl=new AbortController();await fixture(async base=>{for(let i=0;i<30;i++){await streamChat(base,'fake','m',[],{onToken(){}},ctrl.signal);assert.equal(getEventListeners(ctrl.signal,'abort').length,0);}},res=>res.end(event({content:'ok'},'stop')+'\n\n'));
+});
+test('a plain JSON response body is also bounded by the absolute deadline',async()=>{
+ const server=http.createServer((req,res)=>{res.writeHead(200,{'content-type':'application/json'});res.write('{');});await new Promise(r=>server.listen(0,'127.0.0.1',r));
+ try{await assert.rejects(streamChat(`http://127.0.0.1:${server.address().port}`,'fake','m',[],{onToken(){}},new AbortController().signal,{responseTimeoutMs:60}),/response deadline/);}finally{server.closeAllConnections();await new Promise(r=>server.close(r));}
+});
+test('empty model completion is a visible failure rather than the previous action preamble',async()=>{
+ await fixture(async base=>{let output='';await agentTurn(base,'fake','m',[{role:'user',content:'Fix code'}],{onToken:t=>output+=t},new AbortController().signal,{tools:toolDefinitions('cmds'),execute:async()=>{throw Error('must not execute');}});assert.match(output,/ended without an answer or tool call/);},res=>res.end(event({},'stop')+'\n\n'));
 });
 test('Windows CRLF and dollar literals survive exact edits; ambiguous anchors refuse',async()=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'uj-edit-'));try{

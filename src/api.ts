@@ -1,5 +1,5 @@
 import { archivedContext, identifyHistoryEntry, isWorkingContext, protectWorkingContext } from "./context.js";
-import { REQUEST_TIMEOUT_MS, STREAM_IDLE_TIMEOUT_MS, REASONING_TIMEOUT_MS, VERSION } from "./constants.js";
+import { REQUEST_TIMEOUT_MS, STREAM_IDLE_TIMEOUT_MS, REASONING_TIMEOUT_MS, RESPONSE_TIMEOUT_MS, VERSION } from "./constants.js";
 
 export type Role = "system" | "user" | "assistant";
 export interface ChatMessage {
@@ -92,7 +92,10 @@ async function request(baseUrl: string, path: string, init: RequestInit & { key:
   }, REQUEST_TIMEOUT_MS);
   const onOuterAbort = () => controller.abort();
   init.signal?.addEventListener("abort", onOuterAbort, { once: true });
+  // Agent rounds share a signal. Release each old listener as its request ends.
+  controller.signal.addEventListener("abort", () => init.signal?.removeEventListener("abort", onOuterAbort), { once: true });
   try {
+    if (init.signal?.aborted) throw new AbortedError();
     const res = await fetch(baseUrl + path, {
       ...init,
       signal: controller.signal,
@@ -107,6 +110,7 @@ async function request(baseUrl: string, path: string, init: RequestInit & { key:
     });
     return { res, controller };
   } catch (err) {
+    controller.abort();
     if (init.signal?.aborted) throw new AbortedError();
     throw networkError(err, baseUrl, timedOut);
   } finally {
@@ -119,17 +123,19 @@ export interface ModelInfo {
 }
 
 export async function listModels(baseUrl: string, key: string, signal?: AbortSignal): Promise<ModelInfo[]> {
-  const { res } = await request(baseUrl, "/models", { method: "GET", key, signal });
-  if (!res.ok) throw await httpError(res);
-  let json: unknown;
+  const { res, controller } = await request(baseUrl, "/models", { method: "GET", key, signal });
   try {
-    json = await res.json();
-  } catch {
-    throw new ApiError("The server sent an unexpected response to /models. Check the base URL (/api).");
-  }
-  const data = (json as { data?: unknown })?.data;
-  if (!Array.isArray(data)) throw new ApiError("The server sent an unexpected response to /models. Check the base URL (/api).");
-  return data.filter((m) => m && typeof m.id === "string").map((m) => ({ id: m.id as string }));
+    if (!res.ok) throw await httpError(res);
+    let json: unknown;
+    try {
+      json = await res.json();
+    } catch {
+      throw new ApiError("The server sent an unexpected response to /models. Check the base URL (/api).");
+    }
+    const data = (json as { data?: unknown })?.data;
+    if (!Array.isArray(data)) throw new ApiError("The server sent an unexpected response to /models. Check the base URL (/api).");
+    return data.filter((m) => m && typeof m.id === "string").map((m) => ({ id: m.id as string }));
+  } finally { controller.abort(); }
 }
 
 /** Token counts the server reports for a request (OpenAI `usage` object). */
@@ -190,7 +196,7 @@ export async function streamChatRetry(
   messages: ChatMessage[],
   handlers: StreamHandlers,
   signal: AbortSignal,
-  options: { effort?: string; tools?: unknown[]; toolChoice?: unknown; reasoningTimeoutMs?: number } = {},
+  options: { effort?: string; tools?: unknown[]; toolChoice?: unknown; reasoningTimeoutMs?: number; responseTimeoutMs?: number } = {},
 ): Promise<AgentStreamResult | undefined> {
   try {
     return await streamChat(baseUrl, key, model, messages, handlers, signal, options);
@@ -213,7 +219,7 @@ export async function streamChat(
   messages: ChatMessage[],
   handlers: StreamHandlers,
   signal: AbortSignal,
-  options: { effort?: string; tools?: unknown[]; toolChoice?: unknown; reasoningTimeoutMs?: number } = {},
+  options: { effort?: string; tools?: unknown[]; toolChoice?: unknown; reasoningTimeoutMs?: number; responseTimeoutMs?: number } = {},
 ): Promise<AgentStreamResult | undefined> {
   const prepared = prepareRequestHistory(messages as AgentMessage[]);
   handlers.onRequest?.({ characters: prepared.messages.reduce((n, m) => n + msgSize(m), 0), messages: prepared.messages.length });
@@ -232,8 +238,11 @@ export async function streamChat(
       ...(options.effort && options.effort !== "auto" ? { reasoning_effort: options.effort } : {}),
     }),
   });
-  if (!res.ok) throw await httpError(res);
-  if (!res.body) throw new ApiError("The server returned an empty response.");
+  if (!res.ok) { try { throw await httpError(res); } finally { controller.abort(); } }
+  if (!res.body) { controller.abort(); throw new ApiError("The server returned an empty response."); }
+
+  let responseTimedOut = false;
+  const responseTimer = setTimeout(() => { responseTimedOut = true; controller.abort(); }, options.responseTimeoutMs ?? RESPONSE_TIMEOUT_MS);
 
   const contentType = res.headers.get("content-type") ?? "";
   if (!contentType.includes("event-stream")) {
@@ -258,7 +267,12 @@ export async function streamChat(
       const text = msg?.content;
       if (typeof text === "string") return { toolCalls: [], usage, finishReason: reason };
     } catch {
+      if (signal.aborted) throw new AbortedError();
+      if (responseTimedOut) throw new ApiError("The model exceeded the response deadline. Completed work remains saved. Try /effort low or another model.");
       /* fall through */
+    } finally {
+      clearTimeout(responseTimer);
+      controller.abort();
     }
     throw new ApiError("The server sent an unexpected response. Check the base URL (/api).");
   }
@@ -270,7 +284,6 @@ export async function streamChat(
   let idle: NodeJS.Timeout | undefined;
   let reasoningTimer: NodeJS.Timeout | undefined;
   let reasoningTimedOut = false;
-  let productive = false;
   const toolAccum = new Map<number, ToolCallAccum>();
   let finishReason: string | null = null;
   let usage: Usage | undefined;
@@ -280,6 +293,10 @@ export async function streamChat(
       idleTimedOut = true;
       controller.abort();
     }, STREAM_IDLE_TIMEOUT_MS);
+  };
+  const armProgress = () => {
+    clearTimeout(reasoningTimer);
+    reasoningTimer = setTimeout(() => { reasoningTimedOut = true; controller.abort(); }, options.reasoningTimeoutMs ?? REASONING_TIMEOUT_MS);
   };
 
   const processLine = (line: string): boolean => {
@@ -302,9 +319,11 @@ export async function streamChat(
     const delta = choice?.delta ?? {};
     const reasoning = delta.reasoning_content ?? delta.reasoning;
     if (typeof reasoning === "string" && reasoning) handlers.onReasoning?.(reasoning);
-    if ((typeof delta.content === "string" && delta.content) || delta.tool_calls?.length) {
-      productive = true;
-      clearTimeout(reasoningTimer);
+    const toolProgress = Array.isArray(delta.tool_calls) && delta.tool_calls.some((tc: any) =>
+      (typeof tc.function?.name === "string" && tc.function.name.length > 0) ||
+      (typeof tc.function?.arguments === "string" && tc.function.arguments.length > 0));
+    if ((typeof delta.content === "string" && delta.content.trim()) || toolProgress) {
+      armProgress();
     }
     if (typeof delta.content === "string" && delta.content) handlers.onToken(delta.content);
     if (Array.isArray(delta.tool_calls)) {
@@ -326,9 +345,7 @@ export async function streamChat(
   try {
     armIdle();
     // A heartbeat or continuous reasoning must not keep a request alive forever.
-    reasoningTimer = setTimeout(() => {
-      if (!productive) { reasoningTimedOut = true; controller.abort(); }
-    }, options.reasoningTimeoutMs ?? REASONING_TIMEOUT_MS);
+    armProgress();
     for (;;) {
       const { value, done } = await reader.read();
       buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
@@ -346,12 +363,14 @@ export async function streamChat(
     }
   } catch (err) {
     if (signal.aborted) throw new AbortedError();
-    if (reasoningTimedOut) throw new ApiError("The model produced no answer or tool call within the reasoning deadline. Completed work remains saved. Try /effort low or another model.");
+    if (responseTimedOut) throw new ApiError("The model exceeded the response deadline. Completed work remains saved. No incomplete tool call was executed. Try /effort low or another model.");
+    if (reasoningTimedOut) throw new ApiError("The model made no answer or tool-call progress within the reasoning deadline. Completed work remains saved. No incomplete tool call was executed. Try /effort low or another model.");
     if (idleTimedOut) throw new ApiError("The response stalled and timed out. Try again.");
     throw networkError(err, baseUrl, false);
   } finally {
     clearTimeout(idle);
     clearTimeout(reasoningTimer);
+    clearTimeout(responseTimer);
     controller.abort();
     try {
       reader.releaseLock();
@@ -409,6 +428,12 @@ export async function agentTurn(
   let exhausted = false;
   let resumes = 0;
   let permissionBlocked = false;
+  const failedEdits = new Map<string, number>();
+  const stableArgs = (value: unknown): string => {
+    if (Array.isArray(value)) return `[${value.map(stableArgs).join(",")}]`;
+    if (value && typeof value === "object") return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${JSON.stringify(k)}:${stableArgs(v)}`).join(",")}}`;
+    return JSON.stringify(value) ?? "null";
+  };
   const task = [...history].reverse().find(m => m.role === "user")?.content ?? "";
   const actionable = /\b(fix|edit|write|create|make|build|implement|add|update|upgrade|wire|run|test|debug|refactor)\b/i.test(task);
   let lastText = "";
@@ -439,7 +464,14 @@ export async function agentTurn(
       handlers.onToken(warning);
       return lastText + warning;
     }
-    if (!res || !res.toolCalls.length) return lastText;
+    if (!res || !res.toolCalls.length) {
+      if (!roundText.trim()) {
+        const warning = "\n\n[The model ended without an answer or tool call. Completed work remains saved; try /effort low or another model.]";
+        handlers.onToken(warning);
+        return lastText + warning;
+      }
+      return lastText;
+    }
 
     // record the assistant's tool_calls message
     history.push({
@@ -448,6 +480,7 @@ export async function agentTurn(
       tool_calls: res.toolCalls.map((c) => ({ id: c.id, type: "function" as const, function: { name: c.name, arguments: c.args } })),
     });
 
+    let repeatedEdit = false;
     for (const call of res.toolCalls) {
       if (signal.aborted) throw new AbortedError();
       let args: Record<string, unknown> | undefined;
@@ -456,13 +489,27 @@ export async function agentTurn(
         if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) args = parsed;
       } catch { /* Never execute guessed arguments. */ }
       handlers.onToolCall?.(call.name, call.args);
-      const result = args ? await options.execute(call.name, args) :
+      const editKey = args && /^(edit_file|write_file)$/.test(call.name) ? `${call.name}:${stableArgs(args)}` : undefined;
+      const failures = editKey ? failedEdits.get(editKey) ?? 0 : 0;
+      const result = failures > 0 ? { ok: false, output: "This identical file change already failed. Nothing retried. Read the current file and send corrected arguments instead of repeating the failed change." } : args ? await options.execute(call.name, args) :
         { ok: false, output: "Invalid or incomplete tool arguments. Nothing executed. Send a corrected JSON object." };
+      if (editKey && !result.ok) {
+        failedEdits.set(editKey, failures + 1);
+        if (failures > 0) handlers.onRecovery?.("Repeated failed file change blocked; requesting fresh file context and corrected arguments.");
+        if (failures >= 2) repeatedEdit = true;
+      }
+      // A successful change or command may change the file and make an old anchor valid.
+      if (result.ok && /^(edit_file|write_file|run_command)$/.test(call.name)) failedEdits.clear();
       if (!result.ok && /declined|approval is unavailable|cancelled|unavailable in .* mode/i.test(result.output)) permissionBlocked = true;
       handlers.onToolResult?.(call.name, result.ok, result.output);
       const evidence: AgentMessage = { role: "tool", tool_call_id: call.id, content: result.output };
       if (result.historyEntry) identifyHistoryEntry(evidence, result.historyEntry);
       history.push(evidence);
+    }
+    if (repeatedEdit) {
+      const warning = "\n\n[Stopped: the model repeated the same failed file change without correcting it. Completed work remains saved. Read the file again or switch models; no success is implied.]";
+      handlers.onToken(warning);
+      return lastText + warning;
     }
   }
   if (exhausted) {
