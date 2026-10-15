@@ -58,3 +58,22 @@ test('explicit plan mode is respected, reject does not act, and plan off immedia
   assert.ok(requests[1].tools.some(t=>t.function.name==='write_file'));await waitFor(()=>ui.frames.some(f=>/Direct task complete/.test(f)),'direct completion');
  }finally{ui.unmount();ui.cleanup();globalThis.fetch=original;}
 });
+
+test('opt-in planning after real tool use strips both old calls and results from the planning request',async()=>{
+ reset({model:'glm-5.3-abliterated',plan:false});const original=globalThis.fetch,requests=[];
+ const target=path.join(root,'existing.txt');fs.writeFileSync(target,'project evidence');
+ globalThis.fetch=async(url,init)=>{
+  if(String(url).endsWith('/models'))return Response.json({data:[{id:'glm-5.3-abliterated'}]});
+  const body=JSON.parse(init.body);requests.push(body);
+  if(requests.length===1)return response({tool_calls:[{id:'inspect',function:{name:'read_file',arguments:JSON.stringify({path:target})}}]});
+  if(requests.length===2){assert.match(body.messages.find(m=>m.role==='tool').content,/project evidence/);return response({content:'Inspected the project evidence.'});}
+  assert.equal(body.tools,undefined);assert.ok(body.messages.every(m=>m.role!=='tool'&&!m.tool_calls),'no orphaned calls in planning history');
+  return response({content:'1. Inspect the change.\n2. Update the file.'});
+ };
+ const ui=render(React.createElement(App));
+ try{
+  await sleep(200);await submit(ui,'Read the existing file.');await waitFor(()=>ui.frames.some(f=>/Inspected the project evidence/.test(f)),'first tool turn');
+  await submit(ui,'/plan on');await submit(ui,'Update the existing file.');await waitFor(()=>/Start this plan\?/.test(ui.lastFrame()),'planning with old tool history');
+  assert.equal(requests.length,3);await sleep(200);ui.stdin.write('\u001b');await waitFor(()=>ui.frames.some(f=>/Plan rejected/.test(f)),'reject plan');assert.equal(fs.readFileSync(target,'utf8'),'project evidence');
+ }finally{ui.unmount();ui.cleanup();globalThis.fetch=original;}
+});

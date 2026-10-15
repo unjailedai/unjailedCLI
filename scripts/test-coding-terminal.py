@@ -8,7 +8,7 @@ root = Path(tempfile.mkdtemp(prefix='unjailed-permission-pty-'))
 home = root / 'config'
 home.mkdir()
 config = home / 'config.json'
-config.write_text(json.dumps({'tools':'read','autoMode':'ask','fx':False,'saveSessions':False,'plan':False}))
+config.write_text(json.dumps({'tools':'read','autoMode':'ask','fx':False,'saveSessions':False}))
 script = root / 'Desktop' / 'calculator' / 'sum.py'
 content = 'a = float(input("a: "))\nb = float(input("b: "))\nprint(a + b)\n'
 command = "printf '2\\n3\\n' | python3 " + shlex.quote(str(script))
@@ -22,6 +22,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
         requests.append(body)
+        assert any(tool['function']['name']=='write_file' for tool in body.get('tools',[])), 'unexpected tool-free planning request'
+        assert not any('Before doing anything: reply with ONLY a short numbered plan' in message.get('content','') for message in body['messages']), 'forced planning preamble'
         messages = body['messages']
         last = messages[-1]
         if last['role'] == 'tool':
@@ -95,7 +97,7 @@ try:
     result = next(m['content'] for m in requests[-1]['messages'] if m.get('tool_call_id')=='run-calculator' and m['role']=='tool')
     assert '5' in result and 'Exit code: 0' in result, result
     wait(lambda:'Created the Python calculator' in output,'completion rendered')
-    receipt = {'version':json.loads((entry.parent.parent/'package.json').read_text())['version'],'hostPlatform':sys.platform,'realTerminal':True,'localMockModelOnly':True,'permissionPickerVisible':True,'pickerCancellationRetainsReadOnly':True,'deniedWriteCreatedFile':False,'fileAndCommandRequiredSeparateApprovals':True,'pythonProgramOutput':result,'pythonInput':[2,3],'customerMutations':0,'windowsPhysicalDeviceTested':False,'actionPromiseRecovered':True,'model':'glm-5.3-abliterated'}
+    receipt = {'version':json.loads((entry.parent.parent/'package.json').read_text())['version'],'hostPlatform':sys.platform,'realTerminal':True,'localMockModelOnly':True,'permissionPickerVisible':True,'pickerCancellationRetainsReadOnly':True,'deniedWriteCreatedFile':False,'fileAndCommandRequiredSeparateApprovals':True,'pythonProgramOutput':result,'pythonInput':[2,3],'customerMutations':0,'windowsPhysicalDeviceTested':False,'actionPromiseRecovered':True,'noDefaultPlanningRequest':True,'model':'glm-5.3-abliterated'}
     receipt_path.parent.mkdir(parents=True,exist_ok=True)
     receipt_path.write_text(json.dumps(receipt,indent=2)+'\n')
     print(json.dumps(receipt))

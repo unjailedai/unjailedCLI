@@ -102,3 +102,13 @@ test('requested plans and numbered factual answers are not forced into tool use'
   await agentTurn(base,'fake','glm-5.3-flash-abliterated',[{role:'user',content:task}],{onToken(){}},new AbortController().signal,{tools:toolDefinitions('cmds'),execute:async()=>{throw Error('must not execute');}});assert.equal(requests.length,1);
  },res=>res.end(event({content},'stop')+'\n\n'));
 });
+
+
+test('HTTP403 fails once without entering planning or tool recovery',async()=>{
+ const original=globalThis.fetch;let calls=0,executed=0;
+ globalThis.fetch=async()=>{calls++;return new Response('Forbidden',{status:403});};
+ try{
+  await assert.rejects(agentTurn('https://fixture.invalid/v1','fake','glm-5.3-flash-abliterated',[{role:'user',content:'Fix this script'}],{onToken(){}},new AbortController().signal,{tools:toolDefinitions('cmds'),execute:async()=>{executed++;return{ok:true,output:'must not run'};}}),error=>error.status===403);
+  assert.equal(calls,1);assert.equal(executed,0);
+ }finally{globalThis.fetch=original;}
+});
