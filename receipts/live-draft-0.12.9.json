@@ -1,0 +1,44 @@
+{
+  "version": "0.12.9",
+  "sourceCommit": "b73d8163567531d00f04740356c5fe21d32768dd",
+  "artifact": {
+    "sha256": "2c511246523fa7cc94201bc6a60cc610888565d68deb19fce2815f51ad103f68",
+    "bytes": 83191,
+    "files": 33
+  },
+  "tests": {
+    "cliPassed": 120,
+    "cliFailed": 0,
+    "developmentCliPassed": 182
+  },
+  "ci": {
+    "url": "https://github.com/unjailedai/unjailedCLI/actions/runs/38733170992",
+    "allFourJobsPassed": true,
+    "platforms": [
+      "Windows Node22",
+      "macOS Node22",
+      "Linux Node20",
+      "Linux Node22"
+    ]
+  },
+  "behavior": {
+    "actualIncomingCodePreview": true,
+    "partialArgumentsNeverExecute": true,
+    "normalFileApprovalVerified": true,
+    "queuedTypingAvailableDuringPreview": true,
+    "previewNeverBecomesConversationContent": true,
+    "maximumPreviewCharacters": 2400,
+    "maximumPreviewCodeLines": 6,
+    "displayBatchMilliseconds": 80,
+    "actualTerminalReceipt": "live-draft-0.12.9-terminal.json",
+    "lastStepAndPerRequestTimers": true,
+    "noExtraModelRequestsForProgress": true
+  },
+  "limitations": [
+    "A silent model response has no incoming code to preview; waiting is labeled explicitly.",
+    "This does not make model generation faster.",
+    "Actual terminal used a deterministic local model; no new live generation latency claim.",
+    "Physical Windows 10 hardware was not tested."
+  ],
+  "customerMutations": 0
+}
