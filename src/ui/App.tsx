@@ -514,7 +514,10 @@ export function App({ startup }: { startup?: "continue" | "resume" } = {}) {
     setBusy("Saving session");
 
     if (full.trim()) messages.current.push({ role: "assistant", content: full });
-    else if (outcome !== "done" && toolHistory.current.length === toolEventsBefore) messages.current.pop();
+    // A failed request is still the user's latest instruction. Keep it for
+    // follow-ups and /resume even if the model produced nothing. Only discard
+    // an intentionally stopped, empty turn that performed no actions.
+    else if (outcome === "stopped" && toolHistory.current.length === toolEventsBefore) messages.current.pop();
     // A tool may have changed a file before the model disconnected. Retain
     // that task and its evidence even when no assistant prose arrived.
     await persist();
@@ -535,7 +538,7 @@ export function App({ startup }: { startup?: "continue" | "resume" } = {}) {
 
   /** Save the conversation so /resume can pick it up later. Never throws. */
   const persist = async () => {
-    if (!sessionsEnabled() || (!messages.current.some((m) => m.role === "assistant") && !toolHistory.current.length && !notes.current.length)) return;
+    if (!sessionsEnabled() || (!messages.current.some((m) => m.role === "user" || m.role === "assistant") && !toolHistory.current.length && !notes.current.length)) return;
     try {
       const s = session.current ?? newSession(process.cwd(), model);
       const first = !session.current;

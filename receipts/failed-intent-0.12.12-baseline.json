@@ -1,0 +1,12 @@
+{
+  "version": "0.12.12",
+  "realTerminal": true,
+  "localMockModelOnly": true,
+  "originalAndRecoveryBothStalled": true,
+  "failedInstructionSaved": false,
+  "restartAndContinueRetainedLatestRequest": false,
+  "readmeActuallyCreated": false,
+  "originalCalculatorUnchanged": true,
+  "requests": 3,
+  "customerMutations": 0
+}

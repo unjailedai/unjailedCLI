@@ -348,3 +348,9 @@ timeouts, replay completed commands or guarantee that a slow model will finish.
 ### Resumed-chat timeouts (0.12.12)
 
 A restored conversation can stall before its first new tool call, even on a short follow-up such as "keep going". All tool-enabled turns now qualify for one bounded low-effort generation recovery without requiring an English action keyword or a new tool result. The recovery retains the current conversation, asks for the original answer or unfinished task, and permits tools only when needed; an explanation is not converted into a file-writing task. Permissions, partial-call discard, cancellation and the single-recovery limit remain enforced. This handles the missing first-response recovery path; source stalls can still exhaust the bounded attempt.
+
+### Preserve failed instructions (0.12.13)
+
+When a model request fails before producing answer text or executing a tool, the latest user instruction now remains in conversation history and on disk. This also saves a fresh conversation whose first request fails. After restarting with `unjailed -c`, a follow-up such as `continue` retains that instruction instead of falling back to an older task. Intentionally stopped empty turns keep their existing behavior; no error text or incomplete tool call is saved as a successful action.
+
+This fixes lost task intent after a failure. Model/source generation can still stall and exhaust the existing bounded recovery; this release does not increase deadlines, add retries, change the selected model or guarantee source availability. `scripts/test-failed-request-terminal.py` reproduces the old behavior and verifies both resumed and fresh chats using an actual terminal, local synthetic SSE and disposable calculator files.
