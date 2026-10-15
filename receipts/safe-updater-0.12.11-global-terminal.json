@@ -1,0 +1,13 @@
+{
+  "version": "0.12.11",
+  "realTerminal": true,
+  "platform": "linux",
+  "fakeNpmOnly": true,
+  "oneRegistryCheck": true,
+  "staleNpmSkipped": true,
+  "installCommands": 0,
+  "misleadingUpdateArrow": false,
+  "shellDeprecationWarning": false,
+  "promptRemainedEditable": true,
+  "customerMutations": 0
+}

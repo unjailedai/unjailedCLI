@@ -1,0 +1,38 @@
+{
+  "version": "0.12.11",
+  "runtimeCommit": "010b332",
+  "fixes": [
+    "Install only a newer validated published npm version; a local release floor is never an installation target.",
+    "One registry check and one exact target shared between updater and UI; no misleading downgrade arrow or unpinned fallback.",
+    "POSIX npm commands execute without a shell; Windows failed installs restore their prior package directory."
+  ],
+  "tests": {
+    "cliPassed": 129,
+    "developmentCliPassed": 191,
+    "failed": 0,
+    "skipped": 0
+  },
+  "ci": {
+    "url": "https://github.com/unjailedai/unjailedCLI/actions/runs/38765997719",
+    "allFourJobsPassed": true
+  },
+  "artifact": {
+    "bytes": 84764,
+    "files": 33,
+    "sha256": "9b27e19185adc67c92dc5ef35fb6768d39e04a0f9723f9f9e3d4dcaac479a9cb",
+    "publicGitHubBytesVerified": true
+  },
+  "githubRelease": "https://github.com/unjailedai/unjailedCLI/releases/tag/v0.12.11",
+  "ownerInstalledVersion": "0.12.11",
+  "packagedTerminalReceipt": "safe-updater-0.12.11-terminal.json",
+  "globalInstalledTerminalReceipt": "safe-updater-0.12.11-global-terminal.json",
+  "npmPublished": false,
+  "npmLatestVerified": "0.12.8",
+  "npmApprovalPending": true,
+  "limitations": [
+    "An already-running CLI requires exit/restart to load the installed patch.",
+    "Updater tests use fake npm and temporary package fixtures; no new live-model latency or reliability claim.",
+    "Windows restoration verified in CI, not physical Windows10 hardware."
+  ],
+  "customerMutations": 0
+}
