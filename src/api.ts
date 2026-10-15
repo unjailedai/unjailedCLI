@@ -509,12 +509,17 @@ export async function agentTurn(
       });
     } catch (error) {
       if (roundText.trim()) history.push({ role: "assistant", content: roundText });
+      // Every tool-enabled request can stall before its first tool call,
+      // including restored chats, short continuations and non-English tasks.
+      // Retrying a generation must not depend on English action keywords.
       if (error instanceof ReasoningTimeoutError && !error.partialToolCall && !signal.aborted &&
-          (actionable || toolCallSeen) && options.tools?.length && !permissionBlocked && !stallRecovered && round < maxRounds - 1) {
+          options.tools?.length && !permissionBlocked && !stallRecovered && round < maxRounds - 1) {
         stallRecovered = true;
         recovering = true;
-        handlers.onRecovery?.("Model stalled — continuing once at low effort from completed tool results. Completed actions will not be replayed during recovery.");
-        history.push({ role: "user", content: "The previous model response timed out before completing another tool call. Continue the original task from the completed tool results above; do not repeat completed actions. Take one concrete next step using the available tools and respecting all permissions. If blocked, state the blocker. Do not return another plan or promise." });
+        handlers.onRecovery?.(toolCallSeen
+          ? "Model stalled — continuing once at low effort from completed tool results. Completed actions will not be replayed during recovery."
+          : "Model stalled before its next action — retrying once at low effort with the current conversation. No incomplete tool call was executed.");
+        history.push({ role: "user", content: "The previous response timed out before completing. Answer the latest user request using the conversation above. If it continues an unfinished task, resume that task. Use tools only when needed for the requested task, respect all permissions, and do not repeat completed actions. If required information is missing, ask for it; if blocked, state the blocker. Do not replace the answer or requested work with another promise to act." });
         continue;
       }
       if (error instanceof ReasoningTimeoutError) {

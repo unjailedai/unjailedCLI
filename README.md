@@ -343,3 +343,8 @@ including text without a trailing blank line. Separate rounds retain paragraph
 boundaries in saved conversations instead of being glued into one long message.
 These changes do not strip or reclassify model text as hidden reasoning, change
 timeouts, replay completed commands or guarantee that a slow model will finish.
+
+
+### Resumed-chat timeouts (0.12.12)
+
+A restored conversation can stall before its first new tool call, even on a short follow-up such as "keep going". All tool-enabled turns now qualify for one bounded low-effort generation recovery without requiring an English action keyword or a new tool result. The recovery retains the current conversation, asks for the original answer or unfinished task, and permits tools only when needed; an explanation is not converted into a file-writing task. Permissions, partial-call discard, cancellation and the single-recovery limit remain enforced. This handles the missing first-response recovery path; source stalls can still exhaust the bounded attempt.

@@ -76,9 +76,28 @@ test('partial tool calls, denied permissions, and user abort never trigger stall
  }
 });
 
-test('no tool access or non-action questions do not trigger task recovery',async()=>{
- for(const config of [{task:'Explain recursion',tools:toolDefinitions('cmds')},{task:'Create a calculator',tools:[]}])await fixture([res=>stall(res)],async(base,requests)=>{
-  await assert.rejects(agentTurn(base,'fake','glm-5.3-abliterated',[{role:'user',content:config.task}],{onToken(){},onRecovery(){assert.fail('Unexpected recovery');}},new AbortController().signal,{...options(async()=>assert.fail()),tools:config.tools}),ReasoningTimeoutError);assert.equal(requests.length,1);
+test('restored keep-going and non-English requests recover before their first new tool call',async()=>{
+ for(const task of ['keep going','continue','続けてください'])await fixture([res=>stall(res),tool('inspect','read_file',{path:'calculator.py'}),event({content:'The saved task continued from the inspected file.'},'stop')],async(base,requests)=>{
+  const restored=JSON.parse(JSON.stringify([{role:'user',content:'Create a calculator with a UI.'},{role:'assistant',content:'The calculator works; the UI still needs to be completed.'},{role:'user',content:task}]));
+  let actions=0,recoveries=0;
+  const result=await agentTurn(base,'fake','glm-5.3-abliterated',restored,{onToken(){},onRecovery(){recoveries++;}},new AbortController().signal,options(async()=>{actions++;return{ok:true,output:'Existing calculator inspected'};}));
+  assert.equal(result,'The saved task continued from the inspected file.');assert.equal(recoveries,1);assert.equal(actions,1);assert.equal(requests.length,3);
+  assert.equal(requests[1].reasoning_effort,'low');assert.ok(requests[1].messages.some(m=>m.role==='user'&&m.content===task));
+ });
+});
+
+test('question recovery asks for the original answer and does not force a tool action',async()=>{
+ await fixture([res=>stall(res),event({content:'Recursion is a function calling itself.'},'stop')],async(base,requests)=>{
+  let actions=0,recoveries=0;
+  const result=await agentTurn(base,'fake','glm-5.3-abliterated',[{role:'user',content:'Explain recursion'}],{onToken(){},onRecovery(){recoveries++;}},new AbortController().signal,options(async()=>{actions++;return{ok:true,output:'unexpected'};}));
+  assert.equal(result,'Recursion is a function calling itself.');assert.equal(recoveries,1);assert.equal(actions,0);assert.equal(requests.length,2);
+  assert.match(requests[1].messages.at(-1).content,/Use tools only when needed/);
+ });
+});
+
+test('a stalled request without tool access does not trigger agent recovery',async()=>{
+ await fixture([res=>stall(res)],async(base,requests)=>{
+  await assert.rejects(agentTurn(base,'fake','glm-5.3-abliterated',[{role:'user',content:'Create a calculator'}],{onToken(){},onRecovery(){assert.fail('Unexpected recovery');}},new AbortController().signal,{...options(async()=>assert.fail()),tools:[]}),ReasoningTimeoutError);assert.equal(requests.length,1);
  });
 });
 
