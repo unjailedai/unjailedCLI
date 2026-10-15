@@ -44,5 +44,14 @@
     "No reasoning-channel leak was established; separate progress messages had been joined.",
     "Physical Windows10 hardware was not tested."
   ],
-  "customerMutations": 0
+  "customerMutations": 0,
+  "installedGlobalTerminalReceipt": "followup-recovery-0.12.10-global-terminal.json",
+  "distribution": {
+    "githubRelease": "https://github.com/unjailedai/unjailedCLI/releases/tag/v0.12.10",
+    "publicDownloadSha256Verified": true,
+    "ownerGlobalVersion": "0.12.10",
+    "npmLatestVerified": "0.12.8",
+    "npmPublished": false,
+    "npmBlocker": "Owner browser passkey approval failed or expired during prior publication attempts; no active approval."
+  }
 }
