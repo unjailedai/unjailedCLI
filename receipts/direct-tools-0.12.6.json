@@ -1,0 +1,29 @@
+{
+  "version": "0.12.6",
+  "sourceCommit": "4f0f7f0446b9f32faccb5199358ff0d89d99f7e6",
+  "release": "https://github.com/unjailedai/unjailedCLI/releases/tag/v0.12.6",
+  "npmPublished": false,
+  "npmPublishBlocker": "Existing publishing login returns HTTP 401; npm login required. Public npm latest remains 0.12.5.",
+  "planningDefault": "off unless explicitly saved true",
+  "permissionsChanged": false,
+  "planOnlyCorrectionsMaximum": 2,
+  "http403Retries": 0,
+  "validation": {
+    "typeScript": "PASS",
+    "localTests": {"passed": 101, "failed": 0, "skipped": 0},
+    "ci": "https://github.com/unjailedai/unjailedCLI/actions/runs/38721197702",
+    "ciJobs": {"windowsNode22": "PASS", "macOSNode22": "PASS", "linuxNode20": "PASS", "linuxNode22": "PASS"},
+    "isolatedTarballInstall": "PASS",
+    "realTerminalAgainstInstalledPackage": "PASS",
+    "githubDownloadMatchesTestedPackage": true,
+    "physicalWindows10Tested": false,
+    "liveSupplierGenerationTested": false
+  },
+  "artifact": {
+    "filename": "unjailed-0.12.6.tgz",
+    "bytes": 78381,
+    "sha256": "c7af517124b4d8af23758679ab72f3b6221cbcd89f33efcdca5714ae197a9f4d",
+    "url": "https://github.com/unjailedai/unjailedCLI/releases/download/v0.12.6/unjailed-0.12.6.tgz"
+  },
+  "realCustomerMutations": 0
+}
