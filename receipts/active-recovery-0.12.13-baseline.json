@@ -1,0 +1,15 @@
+{
+  "version": "0.12.13",
+  "realTerminal": true,
+  "localMockModelOnly": true,
+  "completedToolsBeforeStall": 3,
+  "silenceLimitSeconds": 1,
+  "recoveryReasoningSeconds": 2,
+  "responseLimitSeconds": 10,
+  "activeRecoveryCompleted": false,
+  "readmeActuallyCreated": false,
+  "calculatorUnchanged": true,
+  "apiRequests": 3,
+  "customerMutations": 0,
+  "physicalWindowsDeviceTested": false
+}

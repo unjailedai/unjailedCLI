@@ -229,7 +229,7 @@ export async function streamChatRetry(
   messages: ChatMessage[],
   handlers: StreamHandlers,
   signal: AbortSignal,
-  options: { effort?: string; tools?: unknown[]; toolChoice?: unknown; maxTokens?: number; reasoningTimeoutMs?: number; responseTimeoutMs?: number } = {},
+  options: { effort?: string; tools?: unknown[]; toolChoice?: unknown; maxTokens?: number; reasoningTimeoutMs?: number; responseTimeoutMs?: number; reasoningProgress?: boolean } = {},
 ): Promise<AgentStreamResult | undefined> {
   try {
     return await streamChat(baseUrl, key, model, messages, handlers, signal, options);
@@ -252,7 +252,7 @@ export async function streamChat(
   messages: ChatMessage[],
   handlers: StreamHandlers,
   signal: AbortSignal,
-  options: { effort?: string; tools?: unknown[]; toolChoice?: unknown; maxTokens?: number; reasoningTimeoutMs?: number; responseTimeoutMs?: number } = {},
+  options: { effort?: string; tools?: unknown[]; toolChoice?: unknown; maxTokens?: number; reasoningTimeoutMs?: number; responseTimeoutMs?: number; reasoningProgress?: boolean } = {},
 ): Promise<AgentStreamResult | undefined> {
   const prepared = prepareRequestHistory(messages as AgentMessage[]);
   const wire = glmThinking(model, prepared.messages, options.tools);
@@ -360,7 +360,13 @@ export async function streamChat(
     if (choice?.finish_reason) finishReason = choice.finish_reason;
     const delta = choice?.delta ?? {};
     const reasoning = delta.reasoning_content ?? delta.reasoning;
-    if (typeof reasoning === "string" && reasoning) handlers.onReasoning?.(reasoning);
+    if (typeof reasoning === "string" && reasoning) {
+      handlers.onReasoning?.(reasoning);
+      // Recovery's shorter watchdog measures actual silence. A model still
+      // generating reasoning may need longer before its next tool call; the
+      // unchanged absolute response deadline still bounds that generation.
+      if (options.reasoningProgress && reasoning.trim()) armProgress();
+    }
     const toolProgress = Array.isArray(delta.tool_calls) && delta.tool_calls.some((tc: any) =>
       (typeof tc.function?.name === "string" && tc.function.name.length > 0) ||
       (typeof tc.function?.arguments === "string" && tc.function.arguments.length > 0));
@@ -505,7 +511,7 @@ export async function agentTurn(
         effort: recoveryAttempt ? "low" : options.effort, tools: options.tools,
         reasoningTimeoutMs: recoveryAttempt ? Math.min(options.reasoningTimeoutMs ?? REASONING_TIMEOUT_MS, 60_000) : options.reasoningTimeoutMs,
         responseTimeoutMs: recoveryAttempt ? Math.min(options.responseTimeoutMs ?? RESPONSE_TIMEOUT_MS, 120_000) : options.responseTimeoutMs,
-        ...(recoveryAttempt ? { maxTokens: 8192 } : {}),
+        ...(recoveryAttempt ? { maxTokens: 8192, reasoningProgress: true } : {}),
       });
     } catch (error) {
       if (roundText.trim()) history.push({ role: "assistant", content: roundText });
