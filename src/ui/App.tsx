@@ -5,7 +5,7 @@ import { COMMANDS, filterCommands, parseCommand } from "../commands.js";
 import { configPath, deleteKey, EFFORTS, maskKey, readConfig, resolveBaseUrl, resolveKey, writeConfig, type Effort, type KeySource } from "../config.js";
 import { executeTool, toolDefinitions } from "../tools.js";
 import { approvalAnswer } from "./approval.js";
-import { currentVersion, latestVersion, runSelfUpdate } from "../updater.js";
+import { runSelfUpdate } from "../updater.js";
 import { recoverAuth, tryClearEnvKeyWindows } from "../auth-recovery.js";
 import { createSkill, loadSkills, projectSkillsDir, skillsSystemPrompt, userSkillsDir, type Skill } from "../skills.js";
 import { agentSystemPrompt } from "../system-prompt.js";
@@ -990,27 +990,17 @@ export function App({ startup }: { startup?: "continue" | "resume" } = {}) {
   // ---------- /update ----------
 
   const updateCommand = async () => {
-    const cur = currentVersion();
     setBusy("Checking npm for updates");
-    const latest = await latestVersion();
-    if (!latest) {
-      setBusy(null);
-      error("Couldn't reach npm. Check your connection and try again.");
-      return;
-    }
-    if (cur === latest) {
-      setBusy(null);
-      success(`You're on the latest version (${cur}).`);
-      return;
-    }
-    info(`Updating ${cur} → ${latest}…`);
-    setBusy("Updating via npm");
-    const ok = await runSelfUpdate((line) => {
-      if (line.trim()) info(line.trim().slice(0, 120));
-    });
-    setBusy(null);
-    if (ok) success(`Updated to ${latest}. Restart the CLI to run the new version.`);
-    else error("The update didn't finish cleanly. Run: npm install -g unjailed@latest");
+    try {
+      const result = await runSelfUpdate((line) => {
+        setBusy("Updating via npm");
+        if (line.trim()) info(line.trim().slice(0, 120));
+      });
+      if (result.status === "updated" || result.status === "unchanged") success(result.message);
+      else error(result.message);
+    } catch {
+      error("Couldn't complete the update check. Restart the CLI to check your installed version; no fallback install was requested.");
+    } finally { setBusy(null); }
   };
 
   const apiInfo = async () => {    push({ kind: "plain", text: apiLines(auth.key, auth.source, model) });

@@ -66,11 +66,11 @@ Type `/` to open the command menu. Use ↑/↓ to move, Enter or Tab to select, 
 
 ### Updating
 
-`/update` pulls the newest version from npm. If your `/update` seems stuck on an old version, you're on a build from before this was fixed — update once by hand and it'll work normally after that:
+`/update` checks npm once and installs only a verified published version newer than your running build. If your GitHub/local build is ahead of npm, it leaves the installation alone and explains the mismatch. A release floor is never treated as proof that a version has been published. Failed or malformed registry checks install nothing.
 
-```sh
-npm install -g unjailed@latest
-```
+After any installation, exit and reopen the CLI. To resume the same chat, run `unjailed -c` from the same project folder. An already-open terminal keeps its previously loaded runtime even when a newer build is installed on disk.
+
+The updater reports the exact installation target. A failed update never recommends an unpinned `@latest` fallback that could downgrade a GitHub build. On Windows, a failed installation restores the prior package directory when possible and retains backup files if restoration is blocked. POSIX npm commands run without a shell.
 
 ## Sessions
 
