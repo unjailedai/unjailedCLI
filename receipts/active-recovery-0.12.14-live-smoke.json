@@ -1,0 +1,18 @@
+{
+  "version": "0.12.14",
+  "ownerExplicitlyApproved": true,
+  "liveModel": "glm-5.3-flash-abliterated",
+  "maximumOutputTokensPerRequest": 1024,
+  "actualPaidRequests": 2,
+  "httpStatuses": [
+    200,
+    200
+  ],
+  "diagnosticToolCalls": 1,
+  "preservedReasoningOnSecondRequest": true,
+  "answerCharacters": 56,
+  "temporaryKeyDeletionVerified": true,
+  "generatedToolActionsExecuted": 0,
+  "manualWalletAdjustments": 0,
+  "limit": "Small synthetic live tool loop; does not prove arbitrary long-project completion or source availability."
+}
