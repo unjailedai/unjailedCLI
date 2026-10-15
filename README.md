@@ -57,7 +57,7 @@ Type `/` to open the command menu. Use ↑/↓ to move, Enter or Tab to select, 
 | `/fun` | Toggle the fun effects — the startup wink, side snow and finish sparkle. `/fun off` turns them off; the choice is saved. Effects are off automatically when output is piped, `NO_COLOR` is set, or the terminal is small. |
 | `/update` | Update the CLI to the latest version from npm. |
 | `/auto` (`/bypass`) | Auto-approve enabled tools. In read/off mode it opens the permission picker; access changes only after your selection. `/auto off` restores confirmations, including when automatic tools were selected. Plan approvals still apply when plan mode is on. |
-| `/plan` | Off by default. `/plan on` opts into a separate numbered plan and approval before each task with write tools. `/plan off` returns to direct execution. File and command permissions still apply. |
+| `/plan` | Off on every startup, including upgrades with an old saved setting. `/plan on` requests a plan and approval for the next task only. `/plan off` cancels it. File and command permissions still apply. |
 | `/resume` | Pick up a previous chat from the current folder. `/resume 2` or `/resume <id>` jumps straight to one. |
 | `/sessions` | Browse saved chats from every folder: resume one, or press `d` to delete it. |
 | `/clear` | Start a new chat and clear the screen. The previous chat stays saved. |
@@ -177,9 +177,10 @@ confirmations, even if auto approval was previously active. `/tools yolo` or
 `/auto` with enabled command tools skips per-action prompts by your choice;
 `/auto off` restores them.
 Tasks go directly to the agent/tool loop by default, without an extra planning request.
-An explicitly saved `/plan on` preference is respected. Use `/plan off` to disable it.
-When planning is explicitly enabled, execution waits for the approved plan; a failed
-plan does not authorize tools. Planning never changes file or command permissions.
+Old saved `plan: true` preferences no longer activate planning. `/plan on` arms
+only the next task; approval, rejection, or a failed draft consumes it. Restarting
+always clears it. A failed plan does not authorize tools. Planning never changes
+file or command permissions.
 
 Foreground commands default to a 10-minute timeout; `timeout_ms` can shorten it.
 Cancellation and timeouts kill the command's process tree. Output retains a
@@ -276,3 +277,17 @@ GLM 5.3 CLI requests default to low reasoning on the hosted API. `/effort high` 
 Repeated identical failed file changes are blocked and returned to the model with instructions to read current text and correct its arguments. Three attempts at the same failed change stop the turn visibly. Requests release their abort listeners after completion, avoiding listener accumulation in long tool sessions. These are client fixes, not a guarantee that every model completes every project.
 
 For Windows 10 coding: update, close and reopen the CLI, verify `unjailed --version`, then select `/tools cmds` and `/effort low`. If GLM Abliterated still stalls, try `/model deepseek-v4.1-flash` or `/model glm-5.3` on the same task. Third-party authenticated API clients can use the uncensored models too; the [OpenCode setup guide](https://unjailedai.com/docs#opencode) shows the existing API key and endpoint configuration. Local runtimes such as Python or Node must be installed for execution.
+
+
+### Upgrade and stream recovery (0.12.7)
+
+Planning is off on startup even if an older installation saved `plan: true`.
+`/plan on` applies only to the next task and is consumed even if the draft fails
+or is rejected. It does not change file or command permissions.
+
+A known interrupted-stream error before any answer or tool-call fragment gets
+one automatic retry. The same conversation and completed tool results are reused;
+completed tools are not executed again. Partial answers or tool calls, unknown
+errors, authentication failures and policy errors still stop visibly. No incomplete
+tool call executes. Retry status is shown as activity, never as assistant output
+or a fabricated completion. Source outages can still outlast this bounded recovery.

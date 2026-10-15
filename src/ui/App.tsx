@@ -104,8 +104,8 @@ export function App({ startup }: { startup?: "continue" | "resume" } = {}) {
     const config = readConfig();
     return (config.tools === "cmds" || config.tools === "yolo") && config.autoMode === "auto" ? "auto" : "ask";
   });
-  /** Planning is opt-in; an unset preference must go straight to the tool loop. */
-  const [planMode, setPlanMode] = useState<"off" | "on">(() => (readConfig().plan === true ? "on" : "off"));
+  /** Planning is a fresh, one-task request; never restore a legacy saved flag. */
+  const [planMode, setPlanMode] = useState<"off" | "on">("off");
   // Skills switched on for this chat (by name). Their files are re-read on every request.
   const [activeSkills, setActiveSkills] = useState<string[]>([]);
 
@@ -287,6 +287,7 @@ export function App({ startup }: { startup?: "continue" | "resume" } = {}) {
     try {
       const baseMessages = withSystem(messages.current, useTools);
       const streamHandlers = {
+        onRetry: (message: string) => info(message),
         onRequest: (context: { characters: number; messages: number }) => {
           requestContextChars = context.characters;
           phase = "waiting";
@@ -357,6 +358,7 @@ export function App({ startup }: { startup?: "continue" | "resume" } = {}) {
 
         // ── plan mode: mutating jobs get a numbered plan + explicit approval first ──
         if (planMode === "on" && (toolsMode === "cmds" || toolsMode === "yolo")) {
+          setPlanMode("off"); // Consume once, including rejection or a failed draft.
           const approved = await planFirst(history, ctrl);
           if (!approved) {
             if (full.trim()) messages.current.push({ role: "assistant", content: full });
@@ -927,9 +929,8 @@ export function App({ startup }: { startup?: "continue" | "resume" } = {}) {
       return;
     }
     setPlanMode("on");
-    writeConfig({ plan: true });
-    success("Plan mode on — the agent drafts a numbered plan before making changes; you approve it.");
-    info("Plan approval applies to every task while write/command tools are enabled. /tools read allows inspection without a plan.");
+    success("Planning enabled for the next task only — review the plan before execution.");
+    info("Planning turns off after that task or a restart. File and command permissions still apply.");
   };
 
   // ---------- /update ----------

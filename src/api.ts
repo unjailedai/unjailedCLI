@@ -147,6 +147,8 @@ export interface Usage {
 
 export interface StreamHandlers {
   onToken: (text: string) => void;
+  /** Transport activity, never assistant text or conversation history. */
+  onRetry?: (message: string) => void;
   /** Each network attempt, including retries and subsequent agent rounds. */
   onRequest?: (context: { characters: number; messages: number }) => void;
   /** Old content was shortened in the request copy; local history is unchanged. */
@@ -203,7 +205,7 @@ export async function streamChatRetry(
   } catch (err) {
     if (signal.aborted) throw err;
     if (err instanceof ApiError && (err.status ?? 0) >= 500) {
-      handlers.onToken?.("\n*(server hiccup — retrying)*\n");
+      handlers.onRetry?.("Connection interrupted before output — retrying once…");
       await new Promise((r) => setTimeout(r, 1500));
       if (signal.aborted) throw err;
       return await streamChat(baseUrl, key, model, messages, handlers, signal, options);
@@ -287,6 +289,7 @@ export async function streamChat(
   const toolAccum = new Map<number, ToolCallAccum>();
   let finishReason: string | null = null;
   let usage: Usage | undefined;
+  let answerStarted = false;
   const armIdle = () => {
     clearTimeout(idle);
     idle = setTimeout(() => {
@@ -312,7 +315,12 @@ export async function streamChat(
     }
     if (evt?.error) {
       const m = typeof evt.error === "string" ? evt.error : evt.error.message;
-      throw new ApiError(m ? `The server reported an error: ${m}` : "The server reported an error mid-response.");
+      // Older gateways emitted these exact messages without an error code.
+      // Retry only a known transport interruption before ANY answer/tool delta.
+      const interrupted = evt.error.code === "stream_interrupted" ||
+        (typeof m === "string" && /^The model stream (?:was interrupted|ended early)\. Retry to continue\.$/.test(m));
+      const retryable = interrupted && !answerStarted && toolAccum.size === 0 && !finishReason;
+      throw new ApiError(m ? `The server reported an error: ${m}` : "The server reported an error mid-response.", retryable ? 502 : undefined);
     }
     const choice = evt?.choices?.[0];
     if (choice?.finish_reason) finishReason = choice.finish_reason;
@@ -325,7 +333,7 @@ export async function streamChat(
     if ((typeof delta.content === "string" && delta.content.trim()) || toolProgress) {
       armProgress();
     }
-    if (typeof delta.content === "string" && delta.content) handlers.onToken(delta.content);
+    if (typeof delta.content === "string" && delta.content) { answerStarted = true; handlers.onToken(delta.content); }
     if (Array.isArray(delta.tool_calls)) {
       for (const [i, tc] of delta.tool_calls.entries()) {
         const idx = typeof tc.index === "number" ? tc.index : i;

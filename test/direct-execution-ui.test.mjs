@@ -15,10 +15,10 @@ function reset(patch={}){fs.rmSync(configPath(),{force:true});writeConfig({tools
 function response(message){return Response.json({choices:[{message}]});}
 test.after(()=>{cleanup();fs.rmSync(root,{recursive:true,force:true});});
 
-test('missing plan preference starts directly with tools, preserves per-file approval, and stays direct next turn and restart',async()=>{
- for(const model of ['glm-5.3-abliterated','glm-5.3-flash-abliterated']){
-  reset({model});assert.equal(readConfig().plan,undefined);
-  const target=path.join(root,model+'.py'),requests=[];const original=globalThis.fetch;
+test('missing and legacy true plan preferences start directly with tools, preserve permission, and stay direct on restart',async()=>{
+ for(const savedPlan of [undefined,true])for(const model of ['glm-5.3-abliterated','glm-5.3-flash-abliterated']){
+  reset({model,plan:savedPlan});assert.equal(readConfig().plan,savedPlan);
+  const target=path.join(root,model+String(savedPlan)+'.py'),requests=[];const original=globalThis.fetch;
   globalThis.fetch=async(url,init)=>{
    if(String(url).endsWith('/models'))return Response.json({data:[{id:model}]});
    const body=JSON.parse(init.body);requests.push(body);
@@ -37,7 +37,7 @@ test('missing plan preference starts directly with tools, preserves per-file app
    await submit(ui,'Check the result again.');await waitFor(()=>requests.length===3,'second prompt executes without a planning pass');
    assert.ok(!ui.frames.some(f=>/Draft plan|Start this plan\?|drafting a plan/.test(f)));
    ui.unmount();ui.cleanup();ui=render(React.createElement(App));await sleep(200);await submit(ui,'Check this project.');await waitFor(()=>requests.length===4,'restart remains direct');
-   assert.equal(readConfig().plan,undefined);assert.ok(!ui.frames.some(f=>/Draft plan|Start this plan\?/.test(f)));
+   assert.equal(readConfig().plan,savedPlan);assert.ok(!ui.frames.some(f=>/Draft plan|Start this plan\?/.test(f)));
   }finally{ui.unmount();ui.cleanup();globalThis.fetch=original;}
  }
 });
@@ -51,7 +51,7 @@ test('explicit plan mode is respected, reject does not act, and plan off immedia
  };
  const ui=render(React.createElement(App));
  try{
-  await sleep(200);await submit(ui,'Fix the calculator.');await waitFor(()=>/Start this plan\?/.test(ui.lastFrame()),'explicit planning approval');
+  await sleep(200);await submit(ui,'/plan on');await submit(ui,'Fix the calculator.');await waitFor(()=>/Start this plan\?/.test(ui.lastFrame()),'explicit planning approval');
   assert.equal(requests.length,1);assert.equal(requests[0].tools,undefined);
   await sleep(200);ui.stdin.write('\u001b');await waitFor(()=>ui.frames.some(f=>/Plan rejected/.test(f)),'plan rejected');assert.equal(requests.length,1);
   await submit(ui,'/plan off');assert.equal(readConfig().plan,false);await submit(ui,'Fix the calculator.');await waitFor(()=>requests.length===2,'direct execution after plan off');
@@ -76,4 +76,37 @@ test('opt-in planning after real tool use strips both old calls and results from
   await submit(ui,'/plan on');await submit(ui,'Update the existing file.');await waitFor(()=>/Start this plan\?/.test(ui.lastFrame()),'planning with old tool history');
   assert.equal(requests.length,3);await sleep(200);ui.stdin.write('\u001b');await waitFor(()=>ui.frames.some(f=>/Plan rejected/.test(f)),'reject plan');assert.equal(fs.readFileSync(target,'utf8'),'project evidence');
  }finally{ui.unmount();ui.cleanup();globalThis.fetch=original;}
+});
+
+
+test('planning is consumed by approval and never saved or restored at restart',async()=>{
+ reset({model:'glm-5.3-abliterated',plan:true});const original=globalThis.fetch,requests=[];
+ globalThis.fetch=async(url,init)=>{
+  if(String(url).endsWith('/models'))return Response.json({data:[{id:'glm-5.3-abliterated'}]});
+  const body=JSON.parse(init.body);requests.push(body);return response({content:body.tools?'Requested change complete.':'1. Inspect the file.\n2. Update the file.'});
+ };
+ let ui=render(React.createElement(App));
+ try{
+  await sleep(200);await submit(ui,'/plan on');await submit(ui,'Update the calculator.');await waitFor(()=>/Start this plan\?/.test(ui.lastFrame()),'explicit single-task plan');
+  await sleep(200);ui.stdin.write('\r');await waitFor(()=>requests.length===2&&ui.frames.some(f=>/Requested change complete/.test(f)),'approved plan executes');
+  await submit(ui,'Check it again.');await waitFor(()=>requests.length===3,'next task');assert.ok(requests[2].tools);
+  await submit(ui,'/plan on');ui.unmount();ui.cleanup();ui=render(React.createElement(App));await sleep(200);await submit(ui,'Check this project.');await waitFor(()=>requests.length===4,'restart task');assert.ok(requests[3].tools);assert.equal(requests.filter(r=>!r.tools).length,1);
+ }finally{ui.unmount();ui.cleanup();globalThis.fetch=original;}
+});
+
+test('rejected or invalid one-task planning does not keep planning armed',async()=>{
+ for(const valid of [true,false]){
+  reset({model:'glm-5.3-abliterated',plan:true});const original=globalThis.fetch,requests=[];
+  globalThis.fetch=async(url,init)=>{
+   if(String(url).endsWith('/models'))return Response.json({data:[{id:'glm-5.3-abliterated'}]});
+   const body=JSON.parse(init.body);requests.push(body);return response({content:body.tools?'Task completed.':valid?'1. Inspect the file.\n2. Update the file.':'Cannot draft right now.'});
+  };
+  const ui=render(React.createElement(App));
+  try{
+   await sleep(200);await submit(ui,'/plan on');await submit(ui,'Update the calculator.');
+   if(valid){await waitFor(()=>/Start this plan\?/.test(ui.lastFrame()),'requested plan');await sleep(200);ui.stdin.write('\u001b');await waitFor(()=>ui.frames.some(f=>/Plan rejected/.test(f)),'rejection');}
+   else await waitFor(()=>ui.frames.some(f=>/No valid plan/.test(f)),'draft failure');
+   await submit(ui,'Check this project.');await waitFor(()=>requests.length===2,'next task direct');assert.ok(requests[1].tools);
+  }finally{ui.unmount();ui.cleanup();globalThis.fetch=original;}
+ }
 });
