@@ -1,0 +1,163 @@
+{
+  "version": "0.12.8",
+  "sourceCommit": "0973d2f3a2b8a8814b4452b80382f3290e571c56",
+  "testedArtifactSha256": "e0eb499ac3e8e3fa81128a3ac5270deb92f2e00cb6f251a868598eb220d857b3",
+  "testedArtifactBytes": 80717,
+  "gatewayCommit": "54300a3",
+  "gatewayDeployment": "dpl_39w7H12RWRd5cHpAixu68w6UdtNR",
+  "productionUrl": "https://unjailedai.com",
+  "cliTests": {
+    "passed": 116,
+    "failed": 0,
+    "skipped": 0
+  },
+  "developmentCliTests": {
+    "passed": 178,
+    "failed": 0,
+    "skipped": 0
+  },
+  "crossPlatformCi": "https://github.com/unjailedai/unjailedCLI/actions/runs/38730338090",
+  "allFourPlatformJobsPassed": true,
+  "physicalWindows10Tested": false,
+  "liveTest": {
+    "task": "Inspect a small calculator project, observe failing tests, fix numeric/string addition, create README and rerun unchanged tests",
+    "actualGatewayAndModel": true,
+    "actualLocalFileAndCommandTools": true,
+    "diagnosticReasoningTimeoutSeconds": 55,
+    "diagnosticResponseTimeoutSeconds": 100,
+    "diagnosticWholeTaskTimeoutSeconds": 240,
+    "normalCliHasNo240SecondWholeTaskLimit": true,
+    "results": [
+      {
+        "model": "glm-5.3-abliterated",
+        "requestedEffort": "medium",
+        "startedAt": "2026-10-15T11:51:13.633Z",
+        "firstToolMs": 50420,
+        "requests": 5,
+        "elapsedMs": 240007,
+        "finalTestsPass": true,
+        "readmeCreated": true,
+        "finished": false,
+        "error": "aborted",
+        "tools": [
+          {
+            "name": "read_file",
+            "allowed": true,
+            "atMs": 50420,
+            "ok": true,
+            "testPassed": false
+          },
+          {
+            "name": "read_file",
+            "allowed": true,
+            "atMs": 50421,
+            "ok": true,
+            "testPassed": false
+          },
+          {
+            "name": "run_command",
+            "allowed": true,
+            "atMs": 100803,
+            "ok": false,
+            "testPassed": false
+          },
+          {
+            "name": "write_file",
+            "allowed": true,
+            "atMs": 191341,
+            "ok": true,
+            "testPassed": false
+          },
+          {
+            "name": "write_file",
+            "allowed": true,
+            "atMs": 191341,
+            "ok": true,
+            "testPassed": false
+          },
+          {
+            "name": "run_command",
+            "allowed": true,
+            "atMs": 229169,
+            "ok": true,
+            "testPassed": true
+          }
+        ]
+      },
+      {
+        "model": "glm-5.3-flash-abliterated",
+        "requestedEffort": "medium",
+        "startedAt": "2026-10-15T11:55:13.661Z",
+        "firstToolMs": 8119,
+        "requests": 6,
+        "elapsedMs": 55494,
+        "finalTestsPass": true,
+        "readmeCreated": true,
+        "finished": true,
+        "error": null,
+        "tools": [
+          {
+            "name": "list_dir",
+            "allowed": true,
+            "atMs": 8119,
+            "ok": true,
+            "testPassed": false
+          },
+          {
+            "name": "read_file",
+            "allowed": true,
+            "atMs": 8119,
+            "ok": true,
+            "testPassed": false
+          },
+          {
+            "name": "read_file",
+            "allowed": true,
+            "atMs": 8119,
+            "ok": true,
+            "testPassed": false
+          },
+          {
+            "name": "run_command",
+            "allowed": true,
+            "atMs": 19179,
+            "ok": false,
+            "testPassed": false
+          },
+          {
+            "name": "write_file",
+            "allowed": true,
+            "atMs": 32292,
+            "ok": true,
+            "testPassed": false
+          },
+          {
+            "name": "write_file",
+            "allowed": true,
+            "atMs": 43115,
+            "ok": true,
+            "testPassed": false
+          },
+          {
+            "name": "run_command",
+            "allowed": true,
+            "atMs": 48953,
+            "ok": true,
+            "testPassed": true
+          }
+        ]
+      }
+    ]
+  },
+  "stallRecovery": {
+    "artificialStallTestedWithLocalProvider": true,
+    "realTerminalReceipt": "stall-continuity-0.12.8-recovery-terminal.json",
+    "twoCommandsCompletedBeforeStall": true,
+    "repeatedCompletedCommandNotExecutedAgain": true,
+    "newFileCreatedAfterRecovery": true,
+    "liveRunsDidNotTriggerStallRecovery": true
+  },
+  "temporaryKeyDeleted": true,
+  "customerMutations": 0,
+  "limitation": "This verifies the small project and bounded recovery, not completion of every large project or game-client task. Source latency and outages remain possible. Standard model artifacts/tests passed before the explicit diagnostic whole-task deadline; final summary was not received."
+}
