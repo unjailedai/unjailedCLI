@@ -1,0 +1,48 @@
+{
+  "version": "0.12.10",
+  "runtimeCommit": "906cda52a55aea093b4318e1630b38dbae811453",
+  "artifact": {
+    "sha256": "6bba2b252215394a55b0bcd5b8372e52812e7959b1f3c59ecd8613e985f40567",
+    "bytes": 84039,
+    "files": 33
+  },
+  "observedSessionMetadata": {
+    "followups": [
+      {
+        "userMessageCharacters": 47,
+        "matchedOldActionPredicate": false,
+        "toolCalls": 17
+      },
+      {
+        "userMessageCharacters": 82,
+        "matchedOldActionPredicate": false,
+        "toolCalls": 7
+      }
+    ],
+    "rawMessagesOrProjectCodePublished": false,
+    "activeCliStartedAfterPreviousInstall": true
+  },
+  "fixes": [
+    "Actual tool work in a turn enables one bounded stall/promise recovery for ordinary follow-ups without an action keyword.",
+    "Round narration flushes before each tool action and saved rounds retain paragraph boundaries.",
+    "Second-stall and permission/incomplete-response stops have distinct messages."
+  ],
+  "tests": {
+    "cliPassed": 123,
+    "developmentCliPassed": 185,
+    "failed": 0,
+    "skipped": 0
+  },
+  "ci": {
+    "url": "https://github.com/unjailedai/unjailedCLI/actions/runs/38750477257",
+    "allFourRuntimeJobsPassed": true
+  },
+  "controlledBeforeAfterReceipt": "followup-recovery-0.12.10-before-after.json",
+  "actualTerminalReceipt": "followup-recovery-0.12.10-terminal.json",
+  "limitations": [
+    "Provider stalls remain possible; no arbitrary large-project completion or new live-model latency claim.",
+    "No reasoning-channel leak was established; separate progress messages had been joined.",
+    "Physical Windows10 hardware was not tested."
+  ],
+  "customerMutations": 0
+}
