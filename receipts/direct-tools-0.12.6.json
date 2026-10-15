@@ -2,8 +2,7 @@
   "version": "0.12.6",
   "sourceCommit": "4f0f7f0446b9f32faccb5199358ff0d89d99f7e6",
   "release": "https://github.com/unjailedai/unjailedCLI/releases/tag/v0.12.6",
-  "npmPublished": false,
-  "npmPublishBlocker": "Login restored as unjailed, but npm publish rejected with HTTP403: account 2FA disabled. Owner must enable npm 2FA before publishing; public latest remains0.12.5.",
+  "npmPublished": true,
   "planningDefault": "off unless explicitly saved true",
   "permissionsChanged": false,
   "planOnlyCorrectionsMaximum": 2,
@@ -26,7 +25,9 @@
     "realTerminalAgainstInstalledPackage": "PASS",
     "githubDownloadMatchesTestedPackage": true,
     "physicalWindows10Tested": false,
-    "liveSupplierGenerationTested": false
+    "liveSupplierGenerationTested": false,
+    "freshNpmLatestInstall": "PASS",
+    "realTerminalAgainstNpmInstall": "PASS"
   },
   "artifact": {
     "filename": "unjailed-0.12.6.tgz",
@@ -35,6 +36,15 @@
     "url": "https://github.com/unjailedai/unjailedCLI/releases/download/v0.12.6/unjailed-0.12.6.tgz"
   },
   "realCustomerMutations": 0,
-  "npmAuthenticationCheckedAt": "2026-10-15T10:40:00Z",
-  "npmAccountTwoFactorEnabled": false
+  "npmAuthenticationCheckedAt": "2026-10-15T10:48:58.483Z",
+  "npmAccountTwoFactorEnabled": true,
+  "npm": {
+    "url": "https://www.npmjs.com/package/unjailed/v/0.12.6",
+    "version": "0.12.6",
+    "latest": "0.12.6",
+    "tarball": "https://registry.npmjs.org/unjailed/-/unjailed-0.12.6.tgz",
+    "integrity": "sha512-pgez/RTfGRRpO8OLr1PcKNphg8niTGPXHUwb8ckoQvwuzwp3kYA/PEcRJD72kxluCgsWuOI89r9VfYSpKy+hNw==",
+    "sha256": "c7af517124b4d8af23758679ab72f3b6221cbcd89f33efcdca5714ae197a9f4d",
+    "matchesTestedArtifact": true
+  }
 }
