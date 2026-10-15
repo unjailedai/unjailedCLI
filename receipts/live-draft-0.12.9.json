@@ -40,5 +40,12 @@
     "Actual terminal used a deterministic local model; no new live generation latency claim.",
     "Physical Windows 10 hardware was not tested."
   ],
-  "customerMutations": 0
+  "customerMutations": 0,
+  "delivery": {
+    "githubRelease": "https://github.com/unjailedai/unjailedCLI/releases/tag/v0.12.9",
+    "publicGithubArchiveMatchesTestedSha256": true,
+    "freshGithubInstallVersion": "0.12.9",
+    "npmPublication": "awaiting-owner-passkey-approval",
+    "websiteInstallerVersion": "0.12.8"
+  }
 }
