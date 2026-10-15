@@ -26,13 +26,24 @@
   "ownerInstalledVersion": "0.12.11",
   "packagedTerminalReceipt": "safe-updater-0.12.11-terminal.json",
   "globalInstalledTerminalReceipt": "safe-updater-0.12.11-global-terminal.json",
-  "npmPublished": false,
-  "npmLatestVerified": "0.12.8",
-  "npmApprovalPending": true,
+  "npmPublished": true,
+  "npmLatestVerified": "0.12.11",
+  "npmApprovalPending": false,
   "limitations": [
     "An already-running CLI requires exit/restart to load the installed patch.",
     "Updater tests use fake npm and temporary package fixtures; no new live-model latency or reliability claim.",
     "Windows restoration verified in CI, not physical Windows10 hardware."
   ],
-  "customerMutations": 0
+  "customerMutations": 0,
+  "npmPublication": {
+    "versionUrl": "https://www.npmjs.com/package/unjailed/v/0.12.11",
+    "publicVersionAndLatestVerifiedAt": "2026-10-15T16:17:24Z",
+    "publicArchiveMatchesTestedArtifact": true,
+    "freshCacheLatestInstalledVersion": "0.12.11",
+    "actualFreshNpmTerminalReceipts": [
+      "safe-updater-0.12.11-npm-terminal.json",
+      "safe-updater-0.12.11-npm-recovery-terminal.json",
+      "safe-updater-0.12.11-npm-permissions-terminal.json"
+    ]
+  }
 }

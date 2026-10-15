@@ -1,0 +1,19 @@
+{
+  "version": "0.12.11",
+  "realTerminal": true,
+  "localMockModelOnly": true,
+  "hostPlatform": "linux",
+  "followupWithoutActionKeywordsRecovered": true,
+  "progressPrintedBeforeCorrespondingAction": true,
+  "liveDraftVisibleBeforeCompleteArguments": true,
+  "partialDraftDidNotCreateFile": true,
+  "completedCommandsBeforeStall": 2,
+  "commandMutationExecutedExactlyOnce": true,
+  "stallRecoveryVisible": true,
+  "completedToolResultsPresentDuringRecovery": true,
+  "newFileCreatedAfterRecovery": true,
+  "forcedPlanning": false,
+  "apiRequests": 5,
+  "windowsPhysicalDeviceTested": false,
+  "customerMutations": 0
+}
