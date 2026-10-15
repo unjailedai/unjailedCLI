@@ -510,12 +510,17 @@ export async function agentTurn(
     } catch (error) {
       if (roundText.trim()) history.push({ role: "assistant", content: roundText });
       if (error instanceof ReasoningTimeoutError && !error.partialToolCall && !signal.aborted &&
-          actionable && options.tools?.length && !permissionBlocked && !stallRecovered && round < maxRounds - 1) {
+          (actionable || toolCallSeen) && options.tools?.length && !permissionBlocked && !stallRecovered && round < maxRounds - 1) {
         stallRecovered = true;
         recovering = true;
         handlers.onRecovery?.("Model stalled — continuing once at low effort from completed tool results. Completed actions will not be replayed during recovery.");
         history.push({ role: "user", content: "The previous model response timed out before completing another tool call. Continue the original task from the completed tool results above; do not repeat completed actions. Take one concrete next step using the available tools and respecting all permissions. If blocked, state the blocker. Do not return another plan or promise." });
         continue;
+      }
+      if (error instanceof ReasoningTimeoutError) {
+        if (stallRecovered) error.message = "The model stalled again after one low-effort recovery attempt. Completed work remains saved. No incomplete tool call was executed. Switch models with /model or send continue.";
+        else if (error.partialToolCall) error.message = "The model stalled during an incomplete response. Pending tool calls were discarded without executing them. Completed work remains saved. Send continue or switch models with /model.";
+        else if (permissionBlocked) error.message = "The model stalled after an action was declined or unavailable. Automatic recovery will not retry that action. Completed work remains saved.";
       }
       throw error;
     }
@@ -523,7 +528,7 @@ export async function agentTurn(
 
     const reasoningOnly = !roundText.trim() && res?.finishReason === "length";
     const lastLine = roundText.trim().split("\n").filter(Boolean).at(-1) ?? "";
-    const promise = actionable && !!options.tools?.length && !permissionBlocked &&
+    const promise = (actionable || toolCallSeen) && !!options.tools?.length && !permissionBlocked &&
       !/[?`]/.test(lastLine) && !/\b(cannot|can't|unable|permission|approval|denied|blocked|done|finished|completed)\b/i.test(lastLine) &&
       /^(?:let me|i(?:'ll| will| am going to)|now i(?:'ll| will))\b.{0,100}\b(start|begin|wire|wiring|edit|fix|implement|create|write|run|inspect|read|check|add|update)\b/i.test(lastLine);
     // A future-tense numbered plan is not completion of a requested edit.

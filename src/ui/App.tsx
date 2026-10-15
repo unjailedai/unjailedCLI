@@ -266,6 +266,7 @@ export function App({ startup }: { startup?: "continue" | "resume" } = {}) {
     let requestNumber = 0;
     let completedTools = 0;
     let lastStep = "";
+    let firstTokenInResponse = true;
     const drafts = new Map<number, ToolDraftBuffer>();
     let draftIndex: number | undefined;
     let trimNotified = false;
@@ -289,6 +290,14 @@ export function App({ startup }: { startup?: "continue" | "resume" } = {}) {
     const schedule = () => {
       if (!timer) timer = setTimeout(sync, 80);
     };
+    const flushAssistant = () => {
+      const pending = displayBuffer.finish().replace(/\n+$/, "");
+      if (pending.trim()) {
+        push({ kind: "assistant", text: pending, first: !flushedAny });
+        flushedAny = true;
+      }
+      setStream(current => current ? { ...current, text: "", hiddenCharacters: 0, flushed: flushedAny } : current);
+    };
 
     setStream({ text: "", hiddenCharacters: 0, started: false, reasoning: false, flushed: false, reasoningChars: 0, reasoningTail: "", phase, request: 0, step: 1, lastStep: "" });
     let outcome: "done" | "stopped" | "error" = "done";
@@ -303,6 +312,7 @@ export function App({ startup }: { startup?: "continue" | "resume" } = {}) {
         onRequest: (context: { characters: number; messages: number }) => {
           requestContextChars = context.characters;
           requestNumber++;
+          firstTokenInResponse = true;
           drafts.clear();
           draftIndex = undefined;
           phase = "waiting";
@@ -315,6 +325,15 @@ export function App({ startup }: { startup?: "continue" | "resume" } = {}) {
           info("Older request context compacted with exact excerpts; full history stays available. Pin key instructions with /remember. Agent tools can recover older text with search_history.");
         },
         onToken: (t: string) => {
+          if (firstTokenInResponse && t) {
+            // Separate assistant responses from distinct agent rounds. Never
+            // glue "checking..." and "now fixing..." into one saved monologue.
+            if (full && !full.endsWith("\n\n")) {
+              const separator = full.endsWith("\n") ? "\n" : "\n\n";
+              full += separator; displayBuffer.append(separator);
+            }
+            firstTokenInResponse = false;
+          }
           if (!drafts.size) phase = "writing";
           reasoning = false;
           full += t;
@@ -420,8 +439,11 @@ export function App({ startup }: { startup?: "continue" | "resume" } = {}) {
 
         const finalText = await agentTurn(baseUrl, auth.key, model, history, {
           ...streamHandlers,
-          onRecovery: (message) => info(message),
+          onRecovery: (message) => { flushAssistant(); info(message); },
           onToolCall: (name, args) => {
+            // A model may announce its step without a trailing blank line.
+            // Print that actual prose before the matching action/result logs.
+            flushAssistant();
             let argsObj: Record<string, unknown> = {};
             try { argsObj = JSON.parse(args || "{}"); } catch { /* raw */ }
             liveTool.current = { name, detail: toolDetail(name, argsObj), t0: Date.now() };

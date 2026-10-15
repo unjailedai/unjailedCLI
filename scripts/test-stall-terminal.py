@@ -38,6 +38,7 @@ class Handler(BaseHTTPRequestHandler):
             if n in [1, 2, 4]:
                 calls = [call(0, 'inspect', 'run_command', {'command': 'node --version'})] if n == 1 else [call(0, 'checked', 'run_command', {'command': command})] if n == 2 else [call(0, 'duplicate', 'run_command', {'command': command}), call(1, 'write', 'write_file', {'path': 'result.txt', 'content': 'verified 5\n'})]
                 self.wfile.write(frame({'reasoning_content': 'Complete reasoning for round ' + str(n)}))
+                if n in [1, 2]: self.wfile.write(frame({'content': 'Inspecting the environment.' if n == 1 else 'Checking local behavior.'}))
                 if n == 4:
                     self.wfile.write(frame({'tool_calls': [calls[0], {'index': 1, 'id': 'write', 'type': 'function', 'function': {'name': 'write_file'}}]}))
                     # A genuinely unfinished JSON string: the real CLI must show
@@ -74,7 +75,7 @@ def wait(predicate, label):
 
 try:
     wait(lambda: 'glm-5.3-abliterated' in output, 'startup')
-    os.write(master, b'Create a calculator and verify it.'); time.sleep(.2); os.write(master, b'\r')
+    os.write(master, b'Nothing happens when I press the button.'); time.sleep(.2); os.write(master, b'\r')
     wait(lambda: 'LIVE DRAFT' in output and 'verified 5' in output, 'incoming draft visible before completion')
     assert not (root / 'result.txt').exists(), 'partial draft executed'
     assert 'not executed yet' in output
@@ -88,8 +89,10 @@ try:
     assert any(m.get('tool_call_id') == 'checked' and m['role'] == 'tool' for m in requests[3]['messages'])
     assert any(m.get('tool_call_id') == 'duplicate' and 'not executed again' in m.get('content', '') for m in requests[4]['messages'])
     assert requests[1]['chat_template_kwargs']['clear_thinking'] is False
+    assert output.index('Inspecting the environment.') < output.index('Step 1 · Running command'), 'progress printed after its action'
+    assert output.index('Checking local behavior.') < output.index('Step 2 · Running command'), 'round narration was delayed/glued'
     assert 'Plan mode' not in output
-    receipt = {'version': json.loads((entry.parent.parent / 'package.json').read_text())['version'], 'realTerminal': True, 'localMockModelOnly': True, 'hostPlatform': sys.platform, 'liveDraftVisibleBeforeCompleteArguments': True, 'partialDraftDidNotCreateFile': True, 'completedCommandsBeforeStall': 2, 'commandMutationExecutedExactlyOnce': True, 'stallRecoveryVisible': True, 'completedToolResultsPresentDuringRecovery': True, 'newFileCreatedAfterRecovery': True, 'forcedPlanning': False, 'apiRequests': len(requests), 'windowsPhysicalDeviceTested': False, 'customerMutations': 0}
+    receipt = {'version': json.loads((entry.parent.parent / 'package.json').read_text())['version'], 'realTerminal': True, 'localMockModelOnly': True, 'hostPlatform': sys.platform, 'followupWithoutActionKeywordsRecovered': True, 'progressPrintedBeforeCorrespondingAction': True, 'liveDraftVisibleBeforeCompleteArguments': True, 'partialDraftDidNotCreateFile': True, 'completedCommandsBeforeStall': 2, 'commandMutationExecutedExactlyOnce': True, 'stallRecoveryVisible': True, 'completedToolResultsPresentDuringRecovery': True, 'newFileCreatedAfterRecovery': True, 'forcedPlanning': False, 'apiRequests': len(requests), 'windowsPhysicalDeviceTested': False, 'customerMutations': 0}
     receipt_path.parent.mkdir(parents=True, exist_ok=True)
     receipt_path.write_text(json.dumps(receipt, indent=2) + '\n')
     print(json.dumps(receipt))

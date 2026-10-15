@@ -44,8 +44,24 @@ test('later-round reasoning stall continues from both command results, preserves
 test('persistent stalls get one recovery for the whole task and then stop',async()=>{
  await fixture([res=>stall(res),res=>stall(res)],async(base,requests)=>{
   let actions=0,recoveries=0;
-  await assert.rejects(agentTurn(base,'fake','glm-5.3-abliterated',[{role:'user',content:'Create a calculator'}],{onToken(){},onRecovery(){recoveries++;}},new AbortController().signal,options(async()=>{actions++;return{ok:true,output:'unexpected'};})),ReasoningTimeoutError);
+  await assert.rejects(agentTurn(base,'fake','glm-5.3-abliterated',[{role:'user',content:'Create a calculator'}],{onToken(){},onRecovery(){recoveries++;}},new AbortController().signal,options(async()=>{actions++;return{ok:true,output:'unexpected'};})),error=>error instanceof ReasoningTimeoutError && /again after one low-effort recovery/.test(error.message));
   assert.equal(requests.length,2);assert.equal(recoveries,1);assert.equal(actions,0);
+ });
+});
+
+test('a follow-up without action keywords recovers after tools have actually run in that turn',async()=>{
+ await fixture([tool('inspect','read_file',{path:'a'}),res=>stall(res),event({content:'The issue is explained by the inspected file.'},'stop')],async(base,requests)=>{
+  let actions=0,recoveries=0;const history=[{role:'user',content:'Nothing happens when I press the button.'}];
+  const final=await agentTurn(base,'fake','glm-5.3-abliterated',history,{onToken(){},onRecovery(){recoveries++;}},new AbortController().signal,options(async()=>{actions++;return{ok:true,output:'Existing file inspected'};}));
+  assert.equal(actions,1);assert.equal(recoveries,1);assert.equal(requests.length,3);assert.equal(final,'The issue is explained by the inspected file.');assert.ok(requests[2].messages.some(m=>m.role==='tool'&&m.tool_call_id==='inspect'));
+ });
+});
+
+test('non-keyword follow-ups recover a later promise to act once actual tool work has begun',async()=>{
+ await fixture([tool('inspect','read_file',{path:'a'}),event({content:"Let me check the next file."},'stop'),event({content:'The next file is not needed; the issue is already identified.'},'stop')],async(base,requests)=>{
+  let recoveries=0;
+  await agentTurn(base,'fake','glm-5.3-abliterated',[{role:'user',content:'Nothing happens when I press the button.'}],{onToken(){},onRecovery(){recoveries++;}},new AbortController().signal,options(async()=>({ok:true,output:'Evidence read'})));
+  assert.equal(recoveries,1);assert.equal(requests.length,3);
  });
 });
 

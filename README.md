@@ -328,3 +328,18 @@ command`. Waiting between rounds shows the last finished/stopped action and
 The status timer resets for each request/phase/action, rather than displaying
 the age of the entire task as if it were a single wait. This adds visibility;
 it does not accelerate the model or add planning requests.
+
+### Recovery for follow-up tasks and ordered progress (0.12.10)
+
+Once tools have actually run in a turn, an ordinary follow-up such as "nothing
+happens when I press the button" is eligible for the existing single bounded
+stall recovery. Recovery no longer depends on that message containing an
+English action keyword. A plain question without tool work remains a question;
+declined permissions and incomplete tool responses still prevent automatic
+recovery. A repeated stall now explicitly says a recovery was already attempted.
+
+Each model response's progress text is printed before its matching action log,
+including text without a trailing blank line. Separate rounds retain paragraph
+boundaries in saved conversations instead of being glued into one long message.
+These changes do not strip or reclassify model text as hidden reasoning, change
+timeouts, replay completed commands or guarantee that a slow model will finish.
