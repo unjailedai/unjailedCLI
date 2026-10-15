@@ -1,0 +1,24 @@
+{
+  "fixture": "Identical ordinary follow-up, completed read, forced no-progress timeout, final answer on recovery",
+  "localMockOnly": true,
+  "realProviderLatencyTested": false,
+  "results": [
+    {
+      "version": "0.12.9",
+      "requests": 2,
+      "executions": 1,
+      "recoveries": 0,
+      "completed": false,
+      "error": "ReasoningTimeoutError"
+    },
+    {
+      "version": "0.12.10",
+      "requests": 3,
+      "executions": 1,
+      "recoveries": 1,
+      "completed": true,
+      "error": null
+    }
+  ],
+  "customerMutations": 0
+}

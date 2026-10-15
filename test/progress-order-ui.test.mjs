@@ -6,11 +6,12 @@ import path from 'node:path';
 import React from 'react';
 import {render,cleanup} from 'ink-testing-library';
 const root=fs.mkdtempSync(path.join(os.tmpdir(),'uj-progress-order-'));
+const originalCwd=process.cwd();process.chdir(root);
 process.env.UNJAILED_HOME=path.join(root,'config');process.env.UNJAILED_API_KEY='sk-fixture-order';process.env.UNJAILED_NO_FX='1';process.env.NO_COLOR='1';
 const {App}=await import('../dist/ui/App.js');const{writeConfig}=await import('../dist/config.js');const{listSessions,loadSession}=await import('../dist/sessions.js');
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function waitFor(fn,label){for(let i=0;i<200;i++){if(fn())return;await sleep(25);}assert.fail(label);}
-test.after(()=>{cleanup();fs.rmSync(root,{recursive:true,force:true});});
+test.after(()=>{cleanup();process.chdir(originalCwd);fs.rmSync(root,{recursive:true,force:true});});
 
 test('each round preamble precedes its tool log and separate updates remain separate in saved history',async()=>{
  writeConfig({tools:'read',autoMode:'ask',fx:false,saveSessions:true});fs.writeFileSync(path.join(root,'a.txt'),'existing evidence');
