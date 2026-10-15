@@ -77,3 +77,28 @@ test('a denied tool cannot trigger automatic promise recovery',async()=>{
  let executions=0;
  await fixture(async(base,requests)=>{await agentTurn(base,'fake','m',[{role:'user',content:'Create a file'}],{onToken(){}},new AbortController().signal,{tools:toolDefinitions('cmds'),execute:async()=>{executions++;return{ok:false,output:'The user declined or approval is unavailable. Nothing executed.'};}});assert.equal(executions,1);assert.equal(requests.length,2);},(res,n)=>res.end(event(n===1?{tool_calls:[{id:'denied',function:{name:'write_file',arguments:'{"path":"a","content":"x"}'}}]}:{content:"I'll now create the file:"},n===1?'tool_calls':'stop')+'\n\n'));
 });
+
+test('an unrequested plan-only response recovers into a tool call on both abliterated models',async()=>{
+ for(const model of ['glm-5.3-abliterated','glm-5.3-flash-abliterated'])await fixture(async(base,requests)=>{
+  let executed=0,recovered=0;
+  await agentTurn(base,'fake',model,[{role:'user',content:'Create a small calculator script'}],{onToken(){},onRecovery:()=>recovered++},new AbortController().signal,{tools:toolDefinitions('cmds'),execute:async(name,args)=>{executed++;assert.equal(name,'write_file');assert.equal(args.path,'calculator.py');return{ok:true,output:'Created calculator.py'};}});
+  assert.equal(requests.length,3);assert.equal(recovered,1);assert.equal(executed,1);
+ },(res,n)=>res.end(event(n===1?{content:'Plan:\n1. Create the calculator script.\n2. Verify the result.'}:n===2?{tool_calls:[{id:'create',function:{name:'write_file',arguments:JSON.stringify({path:'calculator.py',content:'print(2+3)'})}}]}:{content:'Created calculator.py.'},n===2?'tool_calls':'stop')+'\n\n'));
+});
+
+test('repeated plan-only output stops visibly after two corrections, without executing anything',async()=>{
+ await fixture(async(base,requests)=>{let output='',executed=0;
+  await agentTurn(base,'fake','glm-5.3-abliterated',[{role:'user',content:'Fix the calculator script'}],{onToken:t=>output+=t},new AbortController().signal,{tools:toolDefinitions('cmds'),execute:async()=>{executed++;return{ok:true,output:'must not run'};}});
+  assert.equal(requests.length,3);assert.equal(executed,0);assert.match(output,/no success is implied/);
+ },res=>res.end(event({content:'1. Inspect the calculator.\n2. Fix the calculation.'},'stop')+'\n\n'));
+});
+
+test('requested plans and numbered factual answers are not forced into tool use',async()=>{
+ for(const [task,content] of [
+  ['Plan how to fix the calculator','1. Inspect the calculator.\n2. Fix the calculation.'],
+  ['Write the next steps only, no changes','1. Inspect the calculator.\n2. Fix the calculation.'],
+  ['Create a list of two numbers','1. One\n2. Two'],
+ ])await fixture(async(base,requests)=>{
+  await agentTurn(base,'fake','glm-5.3-flash-abliterated',[{role:'user',content:task}],{onToken(){}},new AbortController().signal,{tools:toolDefinitions('cmds'),execute:async()=>{throw Error('must not execute');}});assert.equal(requests.length,1);
+ },res=>res.end(event({content},'stop')+'\n\n'));
+});

@@ -104,8 +104,8 @@ export function App({ startup }: { startup?: "continue" | "resume" } = {}) {
     const config = readConfig();
     return (config.tools === "cmds" || config.tools === "yolo") && config.autoMode === "auto" ? "auto" : "ask";
   });
-  /** Plan mode: model writes a plan first, user approves, then it executes */
-  const [planMode, setPlanMode] = useState<"off" | "on">(() => (readConfig().plan === false ? "off" : "on"));
+  /** Planning is opt-in; an unset preference must go straight to the tool loop. */
+  const [planMode, setPlanMode] = useState<"off" | "on">(() => (readConfig().plan === true ? "on" : "off"));
   // Skills switched on for this chat (by name). Their files are re-read on every request.
   const [activeSkills, setActiveSkills] = useState<string[]>([]);
 
@@ -864,7 +864,8 @@ export function App({ startup }: { startup?: "continue" | "resume" } = {}) {
     let plan = "";
     try {
       await streamChatRetry(baseUrl, auth.key!, model, [
-        ...history.filter((m) => m.role !== "tool"),
+        // Planning has no tools: remove BOTH calls and results from old rounds.
+        ...history.filter((m) => m.role !== "tool").map(({ role, content }) => ({ role, content })),
         { role: "user", content: "Before doing anything: reply with ONLY a short numbered plan (max 8 steps, one line each) for exactly this task. No prose before or after. You will not execute anything yet." },
       ] as ChatMessage[], {
         onToken: (t) => { plan += t; },

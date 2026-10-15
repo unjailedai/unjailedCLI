@@ -428,6 +428,7 @@ export async function agentTurn(
   let exhausted = false;
   let resumes = 0;
   let permissionBlocked = false;
+  let toolCallSeen = false;
   const failedEdits = new Map<string, number>();
   const stableArgs = (value: unknown): string => {
     if (Array.isArray(value)) return `[${value.map(stableArgs).join(",")}]`;
@@ -452,10 +453,19 @@ export async function agentTurn(
     const promise = actionable && !!options.tools?.length && !permissionBlocked &&
       !/[?`]/.test(lastLine) && !/\b(cannot|can't|unable|permission|approval|denied|blocked|done|finished|completed)\b/i.test(lastLine) &&
       /^(?:let me|i(?:'ll| will| am going to)|now i(?:'ll| will))\b.{0,100}\b(start|begin|wire|wiring|edit|fix|implement|create|write|run|inspect|read|check|add|update)\b/i.test(lastLine);
-    if ((!res || !res.toolCalls.length) && (reasoningOnly || promise)) {
+    // A future-tense numbered plan is not completion of a requested edit.
+    // Be conservative: only before this turn's first tool call, and never for
+    // explicit planning/questions, permission blockers or numbered summaries.
+    const planLines = roundText.trim().split("\n").map(line => line.trim()).filter(Boolean);
+    const plannedStep = /^\d+[.)]\s+(?:read|inspect|search|check|edit|fix|create|write|update|add|implement|run|test|verify|build|refactor)\b/i;
+    const planOnly = actionable && !!options.tools?.length && !toolCallSeen && !permissionBlocked &&
+      !/\b(plan|outline|steps|approach)\b/i.test(task) && !/[?`]/.test(roundText) &&
+      planLines.filter(line => plannedStep.test(line)).length >= 2 &&
+      planLines.every(line => plannedStep.test(line) || /^(?:#{1,6}\s*)?(?:short\s+)?plan:?$/i.test(line));
+    if ((!res || !res.toolCalls.length) && (reasoningOnly || promise || planOnly)) {
       if (resumes < 2 && round < maxRounds - 1) {
         resumes++;
-        handlers.onRecovery?.("The model stopped before acting; requesting an actual tool call.");
+        handlers.onRecovery?.(planOnly ? "The model returned only a plan; requesting an actual tool call." : "The model stopped before acting; requesting an actual tool call.");
         if (roundText.trim()) history.push({ role: "assistant", content: roundText });
         history.push({ role: "user", content: "Continue the original task now. Use an available tool to perform the announced next step, respecting all permissions. If you cannot proceed, clearly state the blocker. Do not end with another promise to act." });
         continue;
@@ -473,6 +483,7 @@ export async function agentTurn(
       return lastText;
     }
 
+    toolCallSeen = true;
     // record the assistant's tool_calls message
     history.push({
       role: "assistant",

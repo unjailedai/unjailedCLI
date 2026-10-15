@@ -13,7 +13,7 @@ export const COMMANDS: CommandSpec[] = [
   { name: "tools", description: "Choose read access, confirmed file changes/commands, or automatic tools", args: "[read|cmds|yolo|off]" },
   { name: "auto", description: "Auto-approve enabled tools; choose permissions first in read/off mode", args: "[off]" },
   { name: "bypass", description: "Alias of /auto — stop asking, just do" },
-  { name: "plan", description: "Plan mode: model drafts a numbered plan before touching anything", args: "[off]" },
+  { name: "plan", description: "Opt-in planning before changes (off by default)", args: "[on|off]" },
   { name: "fun", description: "Toggle the fun effects (startup wink, side snow, sparkles)", args: "[on|off]" },
   { name: "api", description: "Show API endpoint, key and connection status" },
   { name: "remember", description: "Pin an instruction in this session, or view/clear notes", args: "[text|clear]" },

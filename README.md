@@ -57,7 +57,7 @@ Type `/` to open the command menu. Use ↑/↓ to move, Enter or Tab to select, 
 | `/fun` | Toggle the fun effects — the startup wink, side snow and finish sparkle. `/fun off` turns them off; the choice is saved. Effects are off automatically when output is piped, `NO_COLOR` is set, or the terminal is small. |
 | `/update` | Update the CLI to the latest version from npm. |
 | `/auto` (`/bypass`) | Auto-approve enabled tools. In read/off mode it opens the permission picker; access changes only after your selection. `/auto off` restores confirmations, including when automatic tools were selected. Plan approvals still apply when plan mode is on. |
-| `/plan` | Plan mode: before writing files or running commands, the agent shows a numbered plan — Enter approves, Esc rejects. `/plan off` disables. |
+| `/plan` | Off by default. `/plan on` opts into a separate numbered plan and approval before each task with write tools. `/plan off` returns to direct execution. File and command permissions still apply. |
 | `/resume` | Pick up a previous chat from the current folder. `/resume 2` or `/resume <id>` jumps straight to one. |
 | `/sessions` | Browse saved chats from every folder: resume one, or press `d` to delete it. |
 | `/clear` | Start a new chat and clear the screen. The previous chat stays saved. |
@@ -176,8 +176,10 @@ access; cancel keeps the current permissions. `/tools cmds` always enables
 confirmations, even if auto approval was previously active. `/tools yolo` or
 `/auto` with enabled command tools skips per-action prompts by your choice;
 `/auto off` restores them.
-Plan mode requires an approved plan before tasks in cmds/yolo mode; if planning
-fails, execution stops.
+Tasks go directly to the agent/tool loop by default, without an extra planning request.
+An explicitly saved `/plan on` preference is respected. Use `/plan off` to disable it.
+When planning is explicitly enabled, execution waits for the approved plan; a failed
+plan does not authorize tools. Planning never changes file or command permissions.
 
 Foreground commands default to a 10-minute timeout; `timeout_ms` can shorten it.
 Cancellation and timeouts kill the command's process tree. Output retains a
