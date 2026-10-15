@@ -46,5 +46,14 @@
     "publicNpmArchiveMatchesTestedPackage": true,
     "freshCacheLatestInstalledVersion": "0.12.12",
     "actualInstalledNpmTerminalReceipt": "resumed-stall-0.12.12-npm-terminal.json"
+  },
+  "websiteInstallers": {
+    "version": "0.12.12",
+    "productionUrl": "https://unjailedai.com",
+    "deployment": "dpl_4GrC3gw8ZBAAj3smexQXr97EAsMW",
+    "ready": true,
+    "publicShellAndPowerShellBytesMatch": true,
+    "typecheckBeforeDeploy": true,
+    "uiChanged": false
   }
 }
