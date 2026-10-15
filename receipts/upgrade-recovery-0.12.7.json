@@ -2,8 +2,8 @@
   "version": "0.12.7",
   "sourceCommit": "abbb7e6663c54be9f16afd494e3b8fdec60d9a63",
   "release": "https://github.com/unjailedai/unjailedCLI/releases/tag/v0.12.7",
-  "npmPublished": false,
-  "npmPublishState": "Awaiting owner browser passkey approval",
+  "npmPublished": true,
+  "npmPublishState": "Published and verified as latest",
   "behavior": {
     "planningOffOnEveryStartup": true,
     "legacySavedPlanTrueIgnored": true,
@@ -27,12 +27,21 @@
     "realTerminalLegacyPlanConfig": "PASS",
     "isolatedPackageInstallAndTerminal": "PASS",
     "physicalWindows10Tested": false,
-    "liveSupplierGenerationTested": false
+    "liveSupplierGenerationTested": false,
+    "freshPublicNpmLatestInstall": "PASS",
+    "realTerminalAgainstNpmInstallWithLegacySavedPlanTrue": "PASS"
   },
   "artifact": {
     "filename": "unjailed-0.12.7.tgz",
     "bytes": 78882,
     "sha256": "d4f1683f8cfb3b3b7a48771e8013350f0c074e2b1ead88d80d4722c6c0cc20a3"
   },
-  "customerFinancialMutations": 0
+  "customerFinancialMutations": 0,
+  "npmVerification": {
+    "verifiedAt": "2026-10-15T11:15:41.289Z",
+    "latest": "0.12.7",
+    "tarball": "https://registry.npmjs.org/unjailed/-/unjailed-0.12.7.tgz",
+    "integrity": "sha512-VG1o1OHVuY6GaY4/z8O60GOCXyPpknmXrSxWJwvAhpyeJYVKgWrhRe169rO1t+2jojRKehdeMhwMnOeJ9k3BAQ==",
+    "matchesTestedArtifact": true
+  }
 }
