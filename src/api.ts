@@ -183,6 +183,8 @@ export interface StreamHandlers {
   /** Old content was shortened in the request copy; local history is unchanged. */
   onContextTrim?: () => void;
   onReasoning?: (text: string) => void;
+  /** Unfinished tool arguments for display only. Never execute these deltas. */
+  onToolDelta?: (delta: { index: number; name: string; argumentsDelta: string }) => void;
   /** Fired once per request when the server reports token usage. */
   onUsage?: (usage: Usage) => void;
 }
@@ -294,6 +296,7 @@ export async function streamChat(
         const accum = new Map<number, ToolCallAccum>();
         msg.tool_calls.forEach((tc, i) => {
           accum.set(tc.index ?? i, { index: tc.index ?? i, id: tc.id, name: tc.function?.name, args: tc.function?.arguments ?? "{}" });
+          handlers.onToolDelta?.({ index: tc.index ?? i, name: tc.function?.name ?? "", argumentsDelta: tc.function?.arguments ?? "{}" });
         });
         return finishTools(accum, reason, usage);
       }
@@ -377,6 +380,7 @@ export async function streamChat(
           else if (name !== slot.name) slot.name += name;
         }
         if (typeof tc.function?.arguments === "string") slot.args += tc.function.arguments;
+        if (slot.name || tc.function?.arguments) handlers.onToolDelta?.({ index: idx, name: slot.name ?? "", argumentsDelta: typeof tc.function?.arguments === "string" ? tc.function.arguments : "" });
       }
     }
     return false;

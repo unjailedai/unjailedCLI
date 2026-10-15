@@ -6,7 +6,7 @@
 set -eu
 
 # Explicit version: npm "latest" tag propagation can lag a fresh publish.
-PKG="unjailed@${UNJAILED_VERSION:-0.12.8}"
+PKG="unjailed@${UNJAILED_VERSION:-0.12.9}"
 MIN_NODE=20
 
 blue() { printf '\033[38;2;125;211;252m%s\033[0m\n' "$1"; }

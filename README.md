@@ -312,3 +312,19 @@ checks. A second stall, partial tool call, denied permission, cancellation or
 authorization/policy error stops; this is not an unlimited retry loop or a
 guarantee that a slow source will finish every task. Usage remains billable under
 normal API rates, including tokens actually generated before a cancellation.
+
+### Live tool/code preview (0.12.9)
+
+While a model streams a file change or command, the terminal shows a compact
+`LIVE DRAFT` with the actual incoming code/arguments, target path and character
+count. JSON escapes are decoded for readability. The preview is display only:
+complete arguments and normal permission checks are still required before any
+file or command action. Drafts are not appended to chat history or sent back to
+the model, and rendering is batched with a bounded six-line preview.
+
+Each action has a numbered description such as `Writing file` or `Running
+command`. Waiting between rounds shows the last finished/stopped action and
+`No new model output yet`; no generated code is invented during a silent wait.
+The status timer resets for each request/phase/action, rather than displaying
+the age of the entire task as if it were a single wait. This adds visibility;
+it does not accelerate the model or add planning requests.

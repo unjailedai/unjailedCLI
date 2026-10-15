@@ -114,7 +114,7 @@ test("terminal keeps activity visible after text, waits for approval, and preser
   try {
     await sleep(200);
     await submit(ui, "Write a test file");
-    await waitFor(() => requests.length === 1 && /Waiting for response/.test(ui.lastFrame()), "first request activity");
+    await waitFor(() => requests.length === 1 && /Waiting for model/.test(ui.lastFrame()), "first request activity");
     assert.ok(requests[0].body.messages.reduce((n, m) => n + m.content.length, 0) < 96_000);
     send(requests[0], { content: "Checking first.\n\n" });
     await waitFor(() => /Writing.*Ctrl\+C/.test(ui.lastFrame()), "activity remains after visible text is flushed");
@@ -123,7 +123,7 @@ test("terminal keeps activity visible after text, waits for approval, and preser
     await waitFor(() => /Waiting for permission/.test(ui.lastFrame()), "explicit approval waiting status");
     await sleep(200);
     ui.stdin.write("n");
-    await waitFor(() => requests.length === 2 && /Waiting for response/.test(ui.lastFrame()), "later agent request shows activity after earlier text");
+    await waitFor(() => requests.length === 2 && /Waiting for model/.test(ui.lastFrame()), "later agent request shows activity after earlier text");
     assert.equal(fs.existsSync(path.join(home, "must-not-exist.txt")), false, "denied write never executes");
     assert.ok(requests[1].body.messages.some((m) => m.role === "tool" && m.tool_call_id === "write-test"), "live round retains its matching result");
     send(requests[1], { content: "Write skipped." }, "stop");

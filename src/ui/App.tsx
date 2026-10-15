@@ -20,6 +20,8 @@ import { SelectList } from "./SelectList.js";
 import { Spinner, type WorkKind } from "./Spinner.js";
 import { useTerminalSize } from "./useTerminalSize.js";
 import { StreamDisplayBuffer, retainDisplayWindow, streamingRowBudget } from "./stream-buffer.js";
+import { ToolDraftBuffer, toolActivity, type ToolDraft as Draft } from "./tool-draft.js";
+import { ToolDraft } from "./ToolDraft.js";
 import {
   deleteSession,
   findSession,
@@ -68,7 +70,11 @@ const TOOL_CHOICES = [
 
 interface Stream {
   hiddenCharacters: number;
-  phase: "waiting" | "reasoning" | "writing";
+  phase: "waiting" | "reasoning" | "writing" | "tool";
+  draft?: Draft;
+  request: number;
+  step: number;
+  lastStep: string;
   text: string; // not yet flushed to the transcript
   started: boolean; // any content received
   reasoning: boolean;
@@ -257,6 +263,11 @@ export function App({ startup }: { startup?: "continue" | "resume" } = {}) {
     let gotUsage = false;
     let requestContextChars = 0;
     let phase: Stream["phase"] = "waiting";
+    let requestNumber = 0;
+    let completedTools = 0;
+    let lastStep = "";
+    const drafts = new Map<number, ToolDraftBuffer>();
+    let draftIndex: number | undefined;
     let trimNotified = false;
     let timer: NodeJS.Timeout | undefined;
 
@@ -272,13 +283,14 @@ export function App({ startup }: { startup?: "continue" | "resume" } = {}) {
         }
       }
       const preview = displayBuffer.preview();
-      setStream({ text: preview.text, hiddenCharacters: preview.hiddenCharacters, started: full.length > 0, reasoning, flushed: flushedAny, reasoningChars, reasoningTail, phase });
+      setStream({ text: preview.text, hiddenCharacters: preview.hiddenCharacters, started: full.length > 0, reasoning, flushed: flushedAny, reasoningChars, reasoningTail, phase,
+        draft: draftIndex === undefined ? undefined : drafts.get(draftIndex)?.snapshot(), request: requestNumber, step: completedTools + 1, lastStep });
     };
     const schedule = () => {
       if (!timer) timer = setTimeout(sync, 80);
     };
 
-    setStream({ text: "", hiddenCharacters: 0, started: false, reasoning: false, flushed: false, reasoningChars: 0, reasoningTail: "", phase });
+    setStream({ text: "", hiddenCharacters: 0, started: false, reasoning: false, flushed: false, reasoningChars: 0, reasoningTail: "", phase, request: 0, step: 1, lastStep: "" });
     let outcome: "done" | "stopped" | "error" = "done";
     let errMsg = "";
     const useTools = toolsMode !== "off";
@@ -290,6 +302,9 @@ export function App({ startup }: { startup?: "continue" | "resume" } = {}) {
         onRetry: (message: string) => info(message),
         onRequest: (context: { characters: number; messages: number }) => {
           requestContextChars = context.characters;
+          requestNumber++;
+          drafts.clear();
+          draftIndex = undefined;
           phase = "waiting";
           reasoning = false;
           schedule();
@@ -300,17 +315,26 @@ export function App({ startup }: { startup?: "continue" | "resume" } = {}) {
           info("Older request context compacted with exact excerpts; full history stays available. Pin key instructions with /remember. Agent tools can recover older text with search_history.");
         },
         onToken: (t: string) => {
-          phase = "writing";
+          if (!drafts.size) phase = "writing";
           reasoning = false;
           full += t;
           displayBuffer.append(t);
           schedule();
         },
         onReasoning: (t: string) => {
-          phase = "reasoning";
+          if (!drafts.size) phase = "reasoning";
           if (!reasoning) { reasoning = true; schedule(); }
           reasoningChars += t ? t.length : 0;
           if (t) reasoningTail = (reasoningTail + t).slice(-90);
+          schedule();
+        },
+        onToolDelta: (delta: { index: number; name: string; argumentsDelta: string }) => {
+          let draft = drafts.get(delta.index);
+          if (!draft) { draft = new ToolDraftBuffer(delta.index); drafts.set(delta.index, draft); }
+          draft.append(delta.name, delta.argumentsDelta);
+          draftIndex = delta.index;
+          phase = "tool";
+          reasoning = false;
           schedule();
         },
         onUsage: (u: { prompt: number; completion: number; total: number }) => {
@@ -401,11 +425,19 @@ export function App({ startup }: { startup?: "continue" | "resume" } = {}) {
             let argsObj: Record<string, unknown> = {};
             try { argsObj = JSON.parse(args || "{}"); } catch { /* raw */ }
             liveTool.current = { name, detail: toolDetail(name, argsObj), t0: Date.now() };
-            push({ kind: "info", text: `⚙ ${name} ${clipArgs(args)}` });
+            drafts.clear();
+            draftIndex = undefined;
+            setStream(current => current ? { ...current, draft: undefined } : current);
+            push({ kind: "info", text: `⚙ Step ${completedTools + 1} · ${toolActivity(name)}\n  ${name} ${clipArgs(args)}` });
+            schedule();
           },
           onToolResult: (name, ok, output) => {
+            lastStep = `${ok ? "Finished" : "Stopped"}: ${toolActivity(name).toLowerCase()}${liveTool.current?.detail ? ` · ${liveTool.current.detail}` : ""}`;
+            completedTools++;
             liveTool.current = null;
+            phase = "waiting";
             push({ kind: ok ? "info" : "error", text: ok ? `↳ ${clipResult(output)}` : `↳ failed: ${clipResult(output)}` });
+            schedule();
           },
         }, ctrl.signal, {
           effort: autoEffortFor(text),
@@ -1329,6 +1361,8 @@ export function App({ startup }: { startup?: "continue" | "resume" } = {}) {
   // ---------- render ----------
 
   const width = size.columns;
+  const draftRows = Math.max(1, Math.min(6, size.rows - 18));
+  const showDraft = !!stream?.draft && (!!stream.draft.preview || /^(write_file|edit_file|run_command)$/.test(stream.draft.name));
   // You can keep typing while a reply streams; Enter queues it for when this one finishes.
   const promptActive = mode.type === "chat" && confirmingCommand === null && planAnswerRef.current === null;
 
@@ -1347,14 +1381,16 @@ export function App({ startup }: { startup?: "continue" | "resume" } = {}) {
       {stream && (
         <Box flexDirection="column" marginBottom={1}>
           {stream.text.trim() ? (
-            <AssistantText text={stream.text} first={!stream.flushed} maxLines={streamingRowBudget(size.rows, width, editor.value, stream.phase === "reasoning", mode.type === "plan-approve")} width={width} hiddenCharacters={stream.hiddenCharacters} />
+            <AssistantText text={stream.text} first={!stream.flushed} maxLines={streamingRowBudget(size.rows - (showDraft ? draftRows + 4 : 0), width, editor.value, stream.phase === "reasoning", mode.type === "plan-approve")} width={width} hiddenCharacters={stream.hiddenCharacters} />
           ) : null}
-          {!liveTool.current && <Spinner kind={stream.phase === "writing" ? "streaming" : stream.phase === "reasoning" ? "reasoning" : "idle"} label={confirmingCommand ? "Waiting for permission" : mode.type === "plan-approve" ? "Waiting for plan approval" : stream.phase === "waiting" ? "Waiting for response" : undefined} />}
+          {showDraft && stream.draft && !liveTool.current && <ToolDraft draft={stream.draft} rows={draftRows} />}
+          {!liveTool.current && <Spinner key={`${stream.request}:${stream.phase}`} kind={stream.phase === "writing" ? "streaming" : stream.phase === "reasoning" ? "reasoning" : stream.phase === "tool" ? "coding" : "idle"} label={confirmingCommand ? "Waiting for permission" : mode.type === "plan-approve" ? "Waiting for plan approval" : stream.phase === "waiting" ? `Step ${stream.step} · Waiting for model` : stream.phase === "tool" ? `Step ${stream.step} · Receiving ${stream.draft?.name === "run_command" ? "command" : "tool draft"}` : undefined} detail={stream.draft?.label} />}
+          {stream.phase === "waiting" && !liveTool.current && <Text dimColor wrap="truncate-end">{stream.lastStep ? `${stream.lastStep} · ` : ""}No new model output yet.</Text>}
           {stream.phase === "reasoning" && !liveTool.current && (
             <Text wrap="truncate-end">{theme.dim(`  thinking… ${stream.reasoningChars.toLocaleString()} chars · ${stream.reasoningTail.slice(-70).replace(/\s+/g, " ").trim()}`)}</Text>
           )}
           {liveTool.current && (
-            <Spinner kind={toolWorkKind(liveTool.current.name)} label={confirmingCommand ? "Waiting for permission" : undefined} detail={liveTool.current.detail} />
+            <Spinner key={`execute:${liveTool.current.t0}`} kind={toolWorkKind(liveTool.current.name)} label={confirmingCommand ? "Waiting for permission" : toolActivity(liveTool.current.name)} detail={liveTool.current.detail} />
           )}
         </Box>
       )}
