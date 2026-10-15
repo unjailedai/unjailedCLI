@@ -45,5 +45,14 @@
       "safe-updater-0.12.11-npm-recovery-terminal.json",
       "safe-updater-0.12.11-npm-permissions-terminal.json"
     ]
+  },
+  "websiteInstallers": {
+    "version": "0.12.11",
+    "productionUrl": "https://unjailedai.com",
+    "deployment": "dpl_EH8Pb347gaEJNx29XYbx5xG8FkNp",
+    "ready": true,
+    "publicShellAndPowerShellBytesMatch": true,
+    "typecheckBeforeDeploy": true,
+    "uiChanged": false
   }
 }
