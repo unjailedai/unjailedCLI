@@ -31,13 +31,20 @@
   "installedGlobalReceipt": "resumed-stall-0.12.12-global-terminal.json",
   "ownerInstalledVersion": "0.12.12",
   "githubRelease": "https://github.com/unjailedai/unjailedCLI/releases/tag/v0.12.12",
-  "npmPublished": false,
-  "npmLatestVerified": "0.12.11",
-  "npmApprovalPending": true,
+  "npmPublished": true,
+  "npmLatestVerified": "0.12.12",
+  "npmApprovalPending": false,
   "limitations": [
     "Local mock generation only; no guarantee that the source model will finish every task.",
     "Already-running CLI requires exit/restart to load the installed update.",
     "No physical Windows10 hardware validation."
   ],
-  "customerMutations": 0
+  "customerMutations": 0,
+  "npmPublication": {
+    "url": "https://www.npmjs.com/package/unjailed/v/0.12.12",
+    "publicVersionAndLatestVerifiedAt": "2026-10-15T16:38:06Z",
+    "publicNpmArchiveMatchesTestedPackage": true,
+    "freshCacheLatestInstalledVersion": "0.12.12",
+    "actualInstalledNpmTerminalReceipt": "resumed-stall-0.12.12-npm-terminal.json"
+  }
 }
