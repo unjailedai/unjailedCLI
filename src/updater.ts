@@ -12,7 +12,7 @@ export function currentVersion(): string {
   return VERSION;
 }
 
-export const RELEASE_FLOOR = "0.12.5";
+export const RELEASE_FLOOR = "0.12.8";
 
 function parseVersion(value: string): { core: bigint[]; pre: string[] } | null {
   if (value.length > 128) return null;

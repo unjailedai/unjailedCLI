@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 
 # Default to an explicit version rather than the "latest" tag: npm tag
 # propagation can lag a fresh publish, landing users on the previous release.
-$version = if ($env:UNJAILED_VERSION) { $env:UNJAILED_VERSION } else { "0.12.5" }
+$version = if ($env:UNJAILED_VERSION) { $env:UNJAILED_VERSION } else { "0.12.8" }
 $pkg = "unjailed@$version"
 $minNode = 20
 

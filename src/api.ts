@@ -18,6 +18,35 @@ export class ApiError extends Error {
   }
 }
 
+/** A stalled generation is different from a rejected request or broken tool. */
+export class ReasoningTimeoutError extends ApiError {
+  constructor(public readonly partialToolCall: boolean) {
+    super("The model made no answer or tool-call progress within the reasoning deadline. Completed work remains saved. No incomplete tool call was executed. Try /effort low or another model.");
+    this.name = "ReasoningTimeoutError";
+  }
+}
+
+// Active-task reasoning is request context, not saved chat content. Weak keys
+// also let completed/discarded conversations release their reasoning buffers.
+const thinking = new WeakMap<AgentMessage, string>();
+
+function glmThinking(model: string, messages: AgentMessage[], tools?: unknown[]) {
+  if (!/^glm-5\.3(?:-|$)/.test(model) || !tools?.length) return { messages };
+  let lastUser = -1;
+  for (let i = messages.length - 1; i >= 0; i--) if (messages[i]!.role === "user") { lastUser = i; break; }
+  const calls = messages.slice(lastUser + 1).filter(m => m.role === "assistant" && m.tool_calls?.length);
+  // Preserve the complete chain or clear it as a whole. Never truncate, invent,
+  // or reuse reasoning from a previous task or a restored session.
+  const preserve = calls.length > 0 && calls.every(m => {
+    const text = thinking.get(m);
+    return !!text && text.length <= 30_000;
+  }) && messages.reduce((n, m) => n + msgSize(m) + (calls.includes(m) ? thinking.get(m)!.length : 0), 0) <= MAX_HISTORY_CHARS;
+  return {
+    messages: messages.map(m => preserve && calls.includes(m) ? { ...m, reasoning_content: thinking.get(m)! } : m),
+    chat_template_kwargs: { clear_thinking: !preserve },
+  };
+}
+
 export class AbortedError extends Error {
   constructor() {
     super("aborted");
@@ -198,7 +227,7 @@ export async function streamChatRetry(
   messages: ChatMessage[],
   handlers: StreamHandlers,
   signal: AbortSignal,
-  options: { effort?: string; tools?: unknown[]; toolChoice?: unknown; reasoningTimeoutMs?: number; responseTimeoutMs?: number } = {},
+  options: { effort?: string; tools?: unknown[]; toolChoice?: unknown; maxTokens?: number; reasoningTimeoutMs?: number; responseTimeoutMs?: number } = {},
 ): Promise<AgentStreamResult | undefined> {
   try {
     return await streamChat(baseUrl, key, model, messages, handlers, signal, options);
@@ -221,10 +250,11 @@ export async function streamChat(
   messages: ChatMessage[],
   handlers: StreamHandlers,
   signal: AbortSignal,
-  options: { effort?: string; tools?: unknown[]; toolChoice?: unknown; reasoningTimeoutMs?: number; responseTimeoutMs?: number } = {},
+  options: { effort?: string; tools?: unknown[]; toolChoice?: unknown; maxTokens?: number; reasoningTimeoutMs?: number; responseTimeoutMs?: number } = {},
 ): Promise<AgentStreamResult | undefined> {
   const prepared = prepareRequestHistory(messages as AgentMessage[]);
-  handlers.onRequest?.({ characters: prepared.messages.reduce((n, m) => n + msgSize(m), 0), messages: prepared.messages.length });
+  const wire = glmThinking(model, prepared.messages, options.tools);
+  handlers.onRequest?.({ characters: JSON.stringify(wire.messages).length, messages: wire.messages.length });
   if (prepared.trimmed) handlers.onContextTrim?.();
   const { res, controller } = await request(baseUrl, "/chat/completions", {
     method: "POST",
@@ -232,11 +262,12 @@ export async function streamChat(
     signal,
     body: JSON.stringify({
       model,
-      messages: prepared.messages,
+      ...wire,
       stream: true,
       stream_options: { include_usage: true },
       ...(options.tools && options.tools.length ? { tools: options.tools } : {}),
       ...(options.toolChoice !== undefined ? { tool_choice: options.toolChoice } : {}),
+      ...(options.maxTokens !== undefined ? { max_tokens: options.maxTokens } : {}),
       ...(options.effort && options.effort !== "auto" ? { reasoning_effort: options.effort } : {}),
     }),
   });
@@ -372,7 +403,7 @@ export async function streamChat(
   } catch (err) {
     if (signal.aborted) throw new AbortedError();
     if (responseTimedOut) throw new ApiError("The model exceeded the response deadline. Completed work remains saved. No incomplete tool call was executed. Try /effort low or another model.");
-    if (reasoningTimedOut) throw new ApiError("The model made no answer or tool-call progress within the reasoning deadline. Completed work remains saved. No incomplete tool call was executed. Try /effort low or another model.");
+    if (reasoningTimedOut) throw new ReasoningTimeoutError(toolAccum.size > 0 || !!finishReason);
     if (idleTimedOut) throw new ApiError("The response stalled and timed out. Try again.");
     throw networkError(err, baseUrl, false);
   } finally {
@@ -427,6 +458,8 @@ export async function agentTurn(
     effort?: string;
     tools?: unknown[];
     maxRounds?: number;
+    reasoningTimeoutMs?: number;
+    responseTimeoutMs?: number;
     execute: (name: string, args: Record<string, unknown>) => Promise<{ ok: boolean; output: string; historyEntry?: string }>;
   },
 ): Promise<string> {
@@ -437,6 +470,9 @@ export async function agentTurn(
   let resumes = 0;
   let permissionBlocked = false;
   let toolCallSeen = false;
+  let stallRecovered = false;
+  let recovering = false;
+  const completedActions = new Map<string, { ok: boolean; output: string; historyEntry?: string }>();
   const failedEdits = new Map<string, number>();
   const stableArgs = (value: unknown): string => {
     if (Array.isArray(value)) return `[${value.map(stableArgs).join(",")}]`;
@@ -450,10 +486,35 @@ export async function agentTurn(
     exhausted = round === maxRounds - 1;
     if (signal.aborted) throw new AbortedError();
     let roundText = "";
-    const res = await streamChatRetry(baseUrl, key, model, history as ChatMessage[], {
-      ...handlers,
-      onToken: (t) => { roundText += t; handlers.onToken(t); },
-    }, signal, { effort: options.effort, tools: options.tools });
+    let roundThinking = "";
+    const recoveryAttempt = recovering;
+    recovering = false;
+    let res: AgentStreamResult | undefined;
+    try {
+      // Recovery has its own strict budget and gets no extra transport retry.
+      res = await (recoveryAttempt ? streamChat : streamChatRetry)(baseUrl, key, model, history as ChatMessage[], {
+        ...handlers,
+        onToken: (t) => { roundText += t; handlers.onToken(t); },
+        onReasoning: (t) => { if (roundThinking.length <= 30_000) roundThinking += t; handlers.onReasoning?.(t); },
+        onRetry: (message) => { roundThinking = ""; handlers.onRetry?.(message); },
+      }, signal, {
+        effort: recoveryAttempt ? "low" : options.effort, tools: options.tools,
+        reasoningTimeoutMs: recoveryAttempt ? Math.min(options.reasoningTimeoutMs ?? REASONING_TIMEOUT_MS, 60_000) : options.reasoningTimeoutMs,
+        responseTimeoutMs: recoveryAttempt ? Math.min(options.responseTimeoutMs ?? RESPONSE_TIMEOUT_MS, 120_000) : options.responseTimeoutMs,
+        ...(recoveryAttempt ? { maxTokens: 8192 } : {}),
+      });
+    } catch (error) {
+      if (roundText.trim()) history.push({ role: "assistant", content: roundText });
+      if (error instanceof ReasoningTimeoutError && !error.partialToolCall && !signal.aborted &&
+          actionable && options.tools?.length && !permissionBlocked && !stallRecovered && round < maxRounds - 1) {
+        stallRecovered = true;
+        recovering = true;
+        handlers.onRecovery?.("Model stalled — continuing once at low effort from completed tool results. Completed actions will not be replayed during recovery.");
+        history.push({ role: "user", content: "The previous model response timed out before completing another tool call. Continue the original task from the completed tool results above; do not repeat completed actions. Take one concrete next step using the available tools and respecting all permissions. If blocked, state the blocker. Do not return another plan or promise." });
+        continue;
+      }
+      throw error;
+    }
     lastText = roundText || lastText;
 
     const reasoningOnly = !roundText.trim() && res?.finishReason === "length";
@@ -493,11 +554,13 @@ export async function agentTurn(
 
     toolCallSeen = true;
     // record the assistant's tool_calls message
-    history.push({
+    const assistant: AgentMessage = {
       role: "assistant",
       content: roundText,
       tool_calls: res.toolCalls.map((c) => ({ id: c.id, type: "function" as const, function: { name: c.name, arguments: c.args } })),
-    });
+    };
+    if (roundThinking) thinking.set(assistant, roundThinking);
+    history.push(assistant);
 
     let repeatedEdit = false;
     for (const call of res.toolCalls) {
@@ -510,8 +573,11 @@ export async function agentTurn(
       handlers.onToolCall?.(call.name, call.args);
       const editKey = args && /^(edit_file|write_file)$/.test(call.name) ? `${call.name}:${stableArgs(args)}` : undefined;
       const failures = editKey ? failedEdits.get(editKey) ?? 0 : 0;
-      const result = failures > 0 ? { ok: false, output: "This identical file change already failed. Nothing retried. Read the current file and send corrected arguments instead of repeating the failed change." } : args ? await options.execute(call.name, args) :
+      const actionKey = args && /^(write_file|edit_file|run_command|delete_file|move_file|launch_app|open_url|stop_process)$/.test(call.name) ? `${call.name}:${stableArgs(args)}` : undefined;
+      const completed = recoveryAttempt && actionKey ? completedActions.get(actionKey) : undefined;
+      const result = completed ? { ...completed, output: "Already completed in this task; not executed again during stall recovery. Previous result:\n" + completed.output } : failures > 0 ? { ok: false, output: "This identical file change already failed. Nothing retried. Read the current file and send corrected arguments instead of repeating the failed change." } : args ? await options.execute(call.name, args) :
         { ok: false, output: "Invalid or incomplete tool arguments. Nothing executed. Send a corrected JSON object." };
+      if (actionKey && result.ok && !completed) completedActions.set(actionKey, result);
       if (editKey && !result.ok) {
         failedEdits.set(editKey, failures + 1);
         if (failures > 0) handlers.onRecovery?.("Repeated failed file change blocked; requesting fresh file context and corrected arguments.");
@@ -574,12 +640,17 @@ export function prepareRequestHistory(history: AgentMessage[]): { messages: Agen
   }
   const resultIds = new Set(selected.filter((m) => m.role === "tool").map((m) => m.tool_call_id));
   const messages: AgentMessage[] = selected.map((m) => {
+    const copyThinking = (copy: AgentMessage) => {
+      const text = thinking.get(m);
+      if (text) thinking.set(copy, text);
+      return copy;
+    };
     if (m.role !== "assistant" || !m.tool_calls) {
       const copy = { ...m };
-      return isWorkingContext(m) ? protectWorkingContext(copy) : copy;
+      return copyThinking(isWorkingContext(m) ? protectWorkingContext(copy) : copy);
     }
     const calls = m.tool_calls.filter((call) => resultIds.has(call.id));
-    return calls.length ? { ...m, tool_calls: calls } : { role: "assistant", content: m.content };
+    return calls.length ? copyThinking({ ...m, tool_calls: calls }) : { role: "assistant", content: m.content };
   });
   trimHistory(messages, 84_000);
   const trimmed = selected.length !== history.length || messages.some((m, i) => m.content !== selected[i]!.content);

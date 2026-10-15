@@ -272,7 +272,7 @@ Update with `/update` or `npm install -g unjailed@latest`. Enable file and comma
 
 The CLI now continues when a model announces work without a tool call, with at most two recovery attempts and a clear failure message. It rejects incomplete tool arguments, preserves final streamed tool calls, supports line ranges in `read_file`, and preserves Windows CRLF and literal dollar characters in edits. Targeted edits and ranged reads support files up to 5 MB; individual full writes and replacements retain a 200 KB limit.
 
-GLM 5.3 CLI requests default to low reasoning on the hosted API. `/effort high` remains available; the CLI's medium level maps to GLM's high level. A stream stops after 180 seconds without new answer/tool-argument progress, including after a short preamble. Reasoning, heartbeats and empty tool frames cannot extend that deadline. Each response also has a 360-second absolute ceiling. Completed changes remain on disk; incomplete timed-out calls do not execute. These deadlines apply per response, so a productive multi-step project can continue longer. Set `UNJAILED_REASONING_TIMEOUT` or `UNJAILED_RESPONSE_TIMEOUT` in seconds to override; `UNJAILED_TIMEOUT` controls header and idle timeouts (default 120 seconds).
+GLM 5.3 CLI requests default to low reasoning on the hosted API. `/effort high` remains available; the CLI's medium level maps to GLM's low level. A stream stops after 180 seconds without new answer/tool-argument progress, including after a short preamble. Reasoning, heartbeats and empty tool frames cannot extend that deadline. Each response also has a 360-second absolute ceiling. Completed changes remain on disk; incomplete timed-out calls do not execute. These deadlines apply per response, so a productive multi-step project can continue longer. Set `UNJAILED_REASONING_TIMEOUT` or `UNJAILED_RESPONSE_TIMEOUT` in seconds to override; `UNJAILED_TIMEOUT` controls header and idle timeouts (default 120 seconds).
 
 Repeated identical failed file changes are blocked and returned to the model with instructions to read current text and correct its arguments. Three attempts at the same failed change stop the turn visibly. Requests release their abort listeners after completion, avoiding listener accumulation in long tool sessions. These are client fixes, not a guarantee that every model completes every project.
 
@@ -291,3 +291,24 @@ completed tools are not executed again. Partial answers or tool calls, unknown
 errors, authentication failures and policy errors still stop visibly. No incomplete
 tool call executes. Retry status is shown as activity, never as assistant output
 or a fabricated completion. Source outages can still outlast this bounded recovery.
+
+### Multi-round tool continuity and stalled-task recovery (0.12.8)
+
+GLM tool turns now return the complete reasoning associated with completed tool
+calls in the active task, as required by the model's interleaved-thinking
+protocol. This context is held in memory only, never saved to chat/session files.
+The hosted gateway forwards it without alteration. Missing, oversized or
+over-budget chains fall back to cleared thinking as a whole; traces from old
+tasks or restored sessions are never reconstructed or invented.
+
+An actionable tool-enabled task that stalls before another tool call can now
+continue once from its completed results, including after a short preamble.
+The recovery request visibly uses low effort, at most 8,192 output tokens,
+60 seconds without progress and a 120-second response ceiling. User-configured
+shorter deadlines still apply. Normal effort resumes after that request.
+Repeated completed mutations/commands requested in the recovery response return
+their saved result instead of executing again. Fresh calls retain normal approval
+checks. A second stall, partial tool call, denied permission, cancellation or
+authorization/policy error stops; this is not an unlimited retry loop or a
+guarantee that a slow source will finish every task. Usage remains billable under
+normal API rates, including tokens actually generated before a cancellation.
