@@ -1,0 +1,43 @@
+{
+  "version": "0.12.12",
+  "runtimeCommit": "262d6af",
+  "cause": "A restored short continuation can time out before its first new tool call; the prior keyword/current-tool gate skipped recovery.",
+  "fix": "All tool-enabled turns get one bounded generation recovery without an English action keyword. The recovery follows the latest request and uses tools only when needed.",
+  "guards": [
+    "one recovery per turn",
+    "declined permission stops recovery",
+    "abort stops recovery",
+    "partial tool calls never execute",
+    "completed current-turn mutations are not replayed in the recovery response"
+  ],
+  "tests": {
+    "publicCliPassed": 131,
+    "developmentCliPassed": 193,
+    "failed": 0,
+    "skipped": 0
+  },
+  "ci": {
+    "url": "https://github.com/unjailedai/unjailedCLI/actions/runs/38769862718",
+    "allFourJobsPassed": true
+  },
+  "artifact": {
+    "bytes": 85179,
+    "files": 33,
+    "sha256": "135b6583a001a2ce469d75de61363d730ecd7b88715497ab78a804e733d69e92",
+    "publicGitHubBytesMatch": true
+  },
+  "beforeReceipt": "resumed-stall-0.12.11-baseline-terminal.json",
+  "afterReceipt": "resumed-stall-0.12.12-terminal.json",
+  "installedGlobalReceipt": "resumed-stall-0.12.12-global-terminal.json",
+  "ownerInstalledVersion": "0.12.12",
+  "githubRelease": "https://github.com/unjailedai/unjailedCLI/releases/tag/v0.12.12",
+  "npmPublished": false,
+  "npmLatestVerified": "0.12.11",
+  "npmApprovalPending": true,
+  "limitations": [
+    "Local mock generation only; no guarantee that the source model will finish every task.",
+    "Already-running CLI requires exit/restart to load the installed update.",
+    "No physical Windows10 hardware validation."
+  ],
+  "customerMutations": 0
+}

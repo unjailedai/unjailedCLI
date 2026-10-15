@@ -1,0 +1,14 @@
+{
+  "version": "0.12.11",
+  "realTerminal": true,
+  "realSavedSessionRestored": true,
+  "localMockModelOnly": true,
+  "platform": "linux",
+  "followup": "keep going",
+  "timeoutBeforeFirstTool": true,
+  "recoveryAttempted": false,
+  "readmeActuallyCreated": false,
+  "requests": 1,
+  "priorCalculatorPreserved": true,
+  "customerMutations": 0
+}
