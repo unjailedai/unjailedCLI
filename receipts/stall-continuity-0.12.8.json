@@ -159,5 +159,17 @@
   },
   "temporaryKeyDeleted": true,
   "customerMutations": 0,
-  "limitation": "This verifies the small project and bounded recovery, not completion of every large project or game-client task. Source latency and outages remain possible. Standard model artifacts/tests passed before the explicit diagnostic whole-task deadline; final summary was not received."
+  "limitation": "This verifies the small project and bounded recovery, not completion of every large project or game-client task. Source latency and outages remain possible. Standard model artifacts/tests passed before the explicit diagnostic whole-task deadline; final summary was not received.",
+  "npm": {
+    "version": "0.12.8",
+    "latest": "0.12.8",
+    "tarball": "https://registry.npmjs.org/unjailed/-/unjailed-0.12.8.tgz",
+    "bytes": 80717,
+    "sha256": "e0eb499ac3e8e3fa81128a3ac5270deb92f2e00cb6f251a868598eb220d857b3",
+    "verifiedAt": "2026-10-15T12:00:37.136Z",
+    "freshCacheLatestInstallVersion": "0.12.8",
+    "installedPackageTerminalRecoveryPassed": true,
+    "installedPackageSeparateApprovalTestPassed": true,
+    "publicGitHubArchiveMatches": true
+  }
 }
